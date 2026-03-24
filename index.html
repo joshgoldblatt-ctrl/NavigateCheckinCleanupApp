@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigate Check-in Cleanup App - Version 2</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        
+        .subtitle {
+            color: #718096;
+            margin-bottom: 5px;
+        }
+        
+        .upload-section {
+            margin-bottom: 30px;
+        }
+        
+        .upload-box {
+            border: 2px dashed #cbd5e0;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s ease;
+            background: #f7fafc;
+        }
+        
+        .upload-box:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .upload-box.loaded {
+            border-color: #48bb78;
+            background: #f0fff4;
+            border-style: solid;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .upload-label {
+            display: inline-block;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            font-weight: 500;
+        }
+        
+        .upload-label:hover {
+            transform: translateY(-2px);
+        }
+        
+        .file-info {
+            margin-top: 15px;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #2d3748;
+        }
+        
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #48bb78;
+            color: white;
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            background: #38a169;
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin: 30px 0;
+        }
+        
+        /* Service Selection Styles */
+        .service-selection-section {
+            display: none;
+            margin: 30px 0;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .service-selection-header {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .service-selection-header h3 {
+            margin: 0;
+            font-size: 1.1em;
+        }
+        
+        .service-selection-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .service-selection-actions button {
+            padding: 6px 12px;
+            border: 1px solid white;
+            background: transparent;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.2s;
+        }
+        
+        .service-selection-actions button:hover {
+            background: white;
+            color: #667eea;
+        }
+        
+        .service-selection-content {
+            padding: 20px;
+            max-height: 500px;
+            overflow-y: auto;
+            background: #f8fafc;
+        }
+        
+        .care-unit-group {
+            margin-bottom: 20px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .care-unit-header {
+            background: #eef2ff;
+            padding: 12px 15px;
+            font-weight: 600;
+            color: #4338ca;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .care-unit-header:hover {
+            background: #e0e7ff;
+        }
+        
+        .care-unit-count {
+            font-size: 0.85em;
+            color: #6366f1;
+            font-weight: normal;
+        }
+        
+        .location-group {
+            border-bottom: 1px solid #f1f5f9;
+        }
+        
+        .location-group:last-child {
+            border-bottom: none;
+        }
+        
+        .location-header {
+            background: #f8fafc;
+            padding: 10px 15px 10px 30px;
+            font-weight: 500;
+            color: #475569;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .location-header:hover {
+            background: #f1f5f9;
+        }
+        
+        .location-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .location-actions button {
+            padding: 3px 8px;
+            font-size: 0.75em;
+            border: 1px solid #cbd5e1;
+            background: white;
+            color: #475569;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .location-actions button:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .location-count {
+            font-size: 0.8em;
+            color: #64748b;
+            font-weight: normal;
+            min-width: 90px;
+            text-align: right;
+        }
+        
+        .service-list {
+            padding: 5px 15px 10px 45px;
+        }
+        
+        .service-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 0;
+            gap: 10px;
+        }
+        
+        .service-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        
+        .service-item label {
+            flex: 1;
+            cursor: pointer;
+            color: #334155;
+            font-size: 0.9em;
+        }
+        
+        .service-item .service-count {
+            color: #94a3b8;
+            font-size: 0.8em;
+            min-width: 80px;
+            text-align: right;
+        }
+        
+        .service-selection-summary {
+            background: #f0fdf4;
+            border-top: 1px solid #bbf7d0;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.95em;
+        }
+        
+        .summary-stats {
+            color: #166534;
+        }
+        
+        .summary-stats strong {
+            color: #15803d;
+            font-size: 1.1em;
+        }
+        
+        .summary-total {
+            color: #6b7280;
+        }
+        
+        /* Alert Styles */
+        .alert {
+            padding: 15px 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+        
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧹 Navigate Check-in Cleanup App</h1>
+            <div class="subtitle">Version 2 - Released January 28, 2026</div>
+            <div class="subtitle">Developed by Josh Goldblatt using Claude</div>
+        </div>
+        
+        <div class="alert alert-info" id="infoAlert"></div>
+        <div class="alert alert-success" id="successAlert"></div>
+        
+        <div class="upload-section">
+            <div class="upload-box" id="checkinBox">
+                <h3>📋 Upload Check-in Report</h3>
+                <p style="color: #718096; margin: 10px 0;">CSV file exported from Navigate</p>
+                <input type="file" id="checkinFile" class="file-input" accept=".csv">
+                <label for="checkinFile" class="upload-label">Choose File</label>
+                <div id="checkinInfo" class="file-info" style="display: none;"></div>
+            </div>
+        </div>
+        
+        <!-- Service Selection Section -->
+        <div class="service-selection-section" id="serviceSelectionSection">
+            <div class="service-selection-header">
+                <h3>📋 Select Check-in Services to Keep</h3>
+                <div class="service-selection-actions">
+                    <button onclick="selectAllServices()">Select All</button>
+                    <button onclick="deselectAllServices()">Deselect All</button>
+                </div>
+            </div>
+            <div class="service-selection-content" id="serviceSelectionContent">
+                <!-- Populated dynamically -->
+            </div>
+            <div class="service-selection-summary">
+                <div class="summary-stats">
+                    <strong id="selectedRecordCount">0</strong> records selected
+                </div>
+                <div class="summary-total">
+                    out of <strong id="totalRecordCount">0</strong> total records
+                </div>
+            </div>
+        </div>
+        
+        <div class="button-group">
+            <button class="btn btn-secondary" id="exportButton" disabled>Export Filtered Check-ins</button>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let checkinData = null;
+        let headers = [];
+        let selectedServices = new Set();
+        let serviceData = {};
+
+        // File input handler
+        document.getElementById('checkinFile').addEventListener('change', function(e) {
+            handleFileUpload(e);
+        });
+
+        document.getElementById('exportButton').addEventListener('click', exportFilteredData);
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const fileSize = (file.size / 1024 / 1024).toFixed(2);
+            
+            document.getElementById('checkinInfo').innerHTML = `⏳ Loading file (${fileSize} MB)...`;
+            document.getElementById('checkinInfo').style.display = 'block';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const csv = e.target.result;
+                parseCSVAsync(csv, file, fileSize);
+            };
+            reader.readAsText(file);
+        }
+
+        function parseCSVAsync(csv, file, fileSize) {
+            setTimeout(() => {
+                const result = parseCSV(csv);
+                headers = result.headers;
+                checkinData = result.data;
+                
+                document.getElementById('checkinInfo').innerHTML = 
+                    `✅ Loaded: ${file.name}<br>Size: ${fileSize} MB<br>Records: ${checkinData.length.toLocaleString()}`;
+                document.getElementById('checkinBox').classList.add('loaded');
+                
+                document.getElementById('infoAlert').innerHTML = 
+                    `ℹ️ File loaded with ${checkinData.length.toLocaleString()} records. Select which services to keep below.`;
+                document.getElementById('infoAlert').style.display = 'block';
+                
+                buildServiceSelection();
+                document.getElementById('exportButton').disabled = false;
+            }, 100);
+        }
+
+        function parseCSV(csv) {
+            const lines = csv.split(/\r?\n/);
+            const headers = [];
+            const data = [];
+            
+            for (let i = 0; i < lines.length; i++) {
+                if (!lines[i]) continue;
+                
+                const row = parseCSVLine(lines[i]);
+                
+                if (i === 0) {
+                    headers.push(...row);
+                } else {
+                    const obj = {};
+                    for (let k = 0; k < headers.length; k++) {
+                        obj[headers[k]] = row[k] || '';
+                    }
+                    data.push(obj);
+                }
+            }
+            
+            return { headers, data };
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const nextChar = line[i + 1];
+                
+                if (char === '"') {
+                    if (inQuotes && nextChar === '"') {
+                        current += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            
+            result.push(current.trim());
+            return result;
+        }
+
+        function buildServiceSelection() {
+            serviceData = {};
+            selectedServices = new Set();
+            
+            // Build hierarchical structure: Care Unit > Location > Services
+            for (const row of checkinData) {
+                let careUnit = row['Care Unit'] || 'Unknown';
+                let location = row['Location'] || 'Unknown';
+                const service = row['Student Services'] || '';
+                
+                // Transform: Advising/Transfer Support -> Transfer/Transfer Engagement Initiative
+                if (careUnit === 'Advising' && location === 'Transfer Support') {
+                    careUnit = 'Transfer';
+                    location = 'Transfer Engagement Initiative';
+                }
+                
+                if (!service) continue;
+                
+                if (!serviceData[careUnit]) {
+                    serviceData[careUnit] = {};
+                }
+                if (!serviceData[careUnit][location]) {
+                    serviceData[careUnit][location] = {};
+                }
+                if (!serviceData[careUnit][location][service]) {
+                    serviceData[careUnit][location][service] = 0;
+                }
+                serviceData[careUnit][location][service]++;
+            }
+            
+            // Build the HTML
+            let html = '';
+            const sortedCareUnits = Object.keys(serviceData).sort();
+            
+            for (const careUnit of sortedCareUnits) {
+                const locations = serviceData[careUnit];
+                const careUnitTotal = Object.values(locations).reduce((sum, loc) => 
+                    sum + Object.values(loc).reduce((s, c) => s + c, 0), 0);
+                
+                html += `<div class="care-unit-group">`;
+                html += `<div class="care-unit-header" onclick="toggleCareUnit(this)">
+                    <span>📁 ${escapeHtml(careUnit)}</span>
+                    <span class="care-unit-count">${careUnitTotal.toLocaleString()} records</span>
+                </div>`;
+                
+                const sortedLocations = Object.keys(locations).sort();
+                for (const location of sortedLocations) {
+                    const services = locations[location];
+                    const locationTotal = Object.values(services).reduce((s, c) => s + c, 0);
+                    const locationId = generateServiceId(careUnit, location, '_location_');
+                    
+                    html += `<div class="location-group">`;
+                    html += `<div class="location-header">
+                        <span onclick="toggleLocation(this.parentElement)" style="cursor: pointer; flex: 1;">📍 ${escapeHtml(location)}</span>
+                        <div class="location-actions">
+                            <button onclick="event.stopPropagation(); selectLocationServices('${locationId}', true)">All</button>
+                            <button onclick="event.stopPropagation(); selectLocationServices('${locationId}', false)">None</button>
+                            <span class="location-count">${locationTotal.toLocaleString()} records</span>
+                        </div>
+                    </div>`;
+                    html += `<div class="service-list" data-location-id="${locationId}">`;
+                    
+                    const sortedServices = Object.keys(services).sort();
+                    for (const service of sortedServices) {
+                        const count = services[service];
+                        const serviceId = generateServiceId(careUnit, location, service);
+                        selectedServices.add(serviceId);
+                        
+                        html += `<div class="service-item">
+                            <input type="checkbox" id="${serviceId}" checked 
+                                   onchange="updateServiceSelection()" 
+                                   data-care-unit="${escapeHtml(careUnit)}"
+                                   data-location="${escapeHtml(location)}"
+                                   data-service="${escapeHtml(service)}"
+                                   data-count="${count}">
+                            <label for="${serviceId}">${escapeHtml(service)}</label>
+                            <span class="service-count">(${count.toLocaleString()})</span>
+                        </div>`;
+                    }
+                    
+                    html += `</div></div>`;
+                }
+                
+                html += `</div>`;
+            }
+            
+            document.getElementById('serviceSelectionContent').innerHTML = html;
+            document.getElementById('serviceSelectionSection').style.display = 'block';
+            document.getElementById('totalRecordCount').textContent = checkinData.length.toLocaleString();
+            updateServiceSelectionSummary();
+        }
+        
+        function generateServiceId(careUnit, location, service) {
+            const combined = `${careUnit}|${location}|${service}`;
+            let hash = 0;
+            for (let i = 0; i < combined.length; i++) {
+                const char = combined.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return 'svc_' + Math.abs(hash).toString(36);
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function toggleCareUnit(header) {
+            const group = header.parentElement;
+            const locationGroups = group.querySelectorAll('.location-group');
+            const isCollapsed = locationGroups[0]?.style.display === 'none';
+            
+            locationGroups.forEach(lg => {
+                lg.style.display = isCollapsed ? 'block' : 'none';
+            });
+        }
+        
+        function toggleLocation(header) {
+            const serviceList = header.nextElementSibling;
+            serviceList.style.display = serviceList.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        function selectLocationServices(locationId, selectAll) {
+            const serviceList = document.querySelector(`[data-location-id="${locationId}"]`);
+            if (!serviceList) return;
+            
+            const checkboxes = serviceList.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = selectAll;
+                if (selectAll) {
+                    selectedServices.add(cb.id);
+                } else {
+                    selectedServices.delete(cb.id);
+                }
+            });
+            updateServiceSelectionSummary();
+        }
+        
+        function selectAllServices() {
+            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = true;
+                selectedServices.add(cb.id);
+            });
+            updateServiceSelectionSummary();
+        }
+        
+        function deselectAllServices() {
+            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = false;
+                selectedServices.delete(cb.id);
+            });
+            updateServiceSelectionSummary();
+        }
+        
+        function updateServiceSelection() {
+            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
+            selectedServices = new Set();
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    selectedServices.add(cb.id);
+                }
+            });
+            updateServiceSelectionSummary();
+        }
+        
+        function updateServiceSelectionSummary() {
+            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
+            let totalRecords = 0;
+            
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    totalRecords += parseInt(cb.dataset.count, 10) || 0;
+                }
+            });
+            
+            document.getElementById('selectedRecordCount').textContent = totalRecords.toLocaleString();
+        }
+        
+        function getSelectedServicesList() {
+            const selected = new Set();
+            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    selected.add(cb.dataset.service);
+                }
+            });
+            return selected;
+        }
+
+        function exportFilteredData() {
+            const selectedServiceNames = getSelectedServicesList();
+            
+            // Filter data
+            const filteredData = checkinData.filter(row => {
+                const service = row['Student Services'] || '';
+                return selectedServiceNames.has(service);
+            });
+            
+            if (filteredData.length === 0) {
+                alert('No records selected. Please select at least one service to export.');
+                return;
+            }
+            
+            // Build CSV with original column structure
+            let csv = headers.map(h => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
+            
+            for (const row of filteredData) {
+                const values = headers.map(h => {
+                    const val = row[h] || '';
+                    return `"${val.replace(/"/g, '""')}"`;
+                });
+                csv += values.join(',') + '\n';
+            }
+            
+            // Download
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `checkin_filtered_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            // Show success message
+            document.getElementById('successAlert').innerHTML = 
+                `✅ Exported ${filteredData.length.toLocaleString()} records to CSV`;
+            document.getElementById('successAlert').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
