@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Navigate Check-in Cleanup App - Version 2</title>
+    <title>Navigate Check-in Cleanup App - Version 3</title>
     <style>
         * {
             margin: 0;
@@ -46,13 +46,16 @@
         }
         
         .upload-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
             margin-bottom: 30px;
         }
         
         .upload-box {
             border: 2px dashed #cbd5e0;
             border-radius: 8px;
-            padding: 40px;
+            padding: 30px;
             text-align: center;
             transition: all 0.3s ease;
             background: #f7fafc;
@@ -75,7 +78,7 @@
         
         .upload-label {
             display: inline-block;
-            padding: 12px 24px;
+            padding: 10px 20px;
             background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
             border-radius: 6px;
@@ -157,6 +160,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
         }
         
         .service-selection-header h3 {
@@ -167,6 +172,7 @@
         .service-selection-actions {
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
         }
         
         .service-selection-actions button {
@@ -306,6 +312,20 @@
             text-align: right;
         }
         
+        .service-item .match-indicator {
+            font-size: 0.9em;
+            min-width: 20px;
+            text-align: center;
+        }
+        
+        .match-yes {
+            color: #16a34a;
+        }
+        
+        .match-no {
+            color: #dc2626;
+        }
+        
         .service-selection-summary {
             background: #f0fdf4;
             border-top: 1px solid #bbf7d0;
@@ -314,6 +334,8 @@
             justify-content: space-between;
             align-items: center;
             font-size: 0.95em;
+            flex-wrap: wrap;
+            gap: 10px;
         }
         
         .summary-stats {
@@ -327,6 +349,22 @@
         
         .summary-total {
             color: #6b7280;
+        }
+        
+        .match-legend {
+            display: flex;
+            gap: 15px;
+            font-size: 0.85em;
+            color: #475569;
+            padding: 10px 20px;
+            background: #fefce8;
+            border-top: 1px solid #fef08a;
+        }
+        
+        .match-legend span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
         
         /* Alert Styles */
@@ -354,7 +392,7 @@
     <div class="container">
         <div class="header">
             <h1>🧹 Navigate Check-in Cleanup App</h1>
-            <div class="subtitle">Version 2 - Released January 28, 2026</div>
+            <div class="subtitle">Version 3 - Released January 28, 2026</div>
             <div class="subtitle">Developed by Josh Goldblatt using Claude</div>
         </div>
         
@@ -362,6 +400,13 @@
         <div class="alert alert-success" id="successAlert"></div>
         
         <div class="upload-section">
+            <div class="upload-box" id="appointmentBox">
+                <h3>📅 Upload Appointment Report</h3>
+                <p style="color: #718096; margin: 10px 0;">CSV file exported from Navigate</p>
+                <input type="file" id="appointmentFile" class="file-input" accept=".csv">
+                <label for="appointmentFile" class="upload-label">Choose File</label>
+                <div id="appointmentInfo" class="file-info" style="display: none;"></div>
+            </div>
             <div class="upload-box" id="checkinBox">
                 <h3>📋 Upload Check-in Report</h3>
                 <p style="color: #718096; margin: 10px 0;">CSV file exported from Navigate</p>
@@ -378,7 +423,13 @@
                 <div class="service-selection-actions">
                     <button onclick="selectAllServices()">Select All</button>
                     <button onclick="deselectAllServices()">Deselect All</button>
+                    <button onclick="selectMatchingOnly()">Select Matching Only</button>
+                    <button onclick="selectNonMatchingOnly()">Select Non-Matching Only</button>
                 </div>
+            </div>
+            <div class="match-legend">
+                <span><span class="match-yes">✅</span> Matches an appointment service</span>
+                <span><span class="match-no">❌</span> No matching appointment service</span>
             </div>
             <div class="service-selection-content" id="serviceSelectionContent">
                 <!-- Populated dynamically -->
@@ -400,52 +451,127 @@
 
     <script>
         // Global variables
+        let appointmentData = null;
         let checkinData = null;
-        let headers = [];
+        let checkinHeaders = [];
         let selectedServices = new Set();
         let serviceData = {};
+        let appointmentServices = new Set(); // All unique services from appointment report
 
-        // File input handler
+        // File input handlers
+        document.getElementById('appointmentFile').addEventListener('change', function(e) {
+            handleFileUpload(e, 'appointment');
+        });
+        
         document.getElementById('checkinFile').addEventListener('change', function(e) {
-            handleFileUpload(e);
+            handleFileUpload(e, 'checkin');
         });
 
         document.getElementById('exportButton').addEventListener('click', exportFilteredData);
 
-        function handleFileUpload(event) {
+        function handleFileUpload(event, type) {
             const file = event.target.files[0];
             if (!file) return;
 
             const fileSize = (file.size / 1024 / 1024).toFixed(2);
             
-            document.getElementById('checkinInfo').innerHTML = `⏳ Loading file (${fileSize} MB)...`;
-            document.getElementById('checkinInfo').style.display = 'block';
+            if (type === 'appointment') {
+                document.getElementById('appointmentInfo').innerHTML = `⏳ Loading file (${fileSize} MB)...`;
+                document.getElementById('appointmentInfo').style.display = 'block';
+            } else {
+                document.getElementById('checkinInfo').innerHTML = `⏳ Loading file (${fileSize} MB)...`;
+                document.getElementById('checkinInfo').style.display = 'block';
+            }
 
             const reader = new FileReader();
             reader.onload = function(e) {
                 const csv = e.target.result;
-                parseCSVAsync(csv, file, fileSize);
+                parseCSVAsync(csv, file, fileSize, type);
             };
             reader.readAsText(file);
         }
 
-        function parseCSVAsync(csv, file, fileSize) {
+        function parseCSVAsync(csv, file, fileSize, type) {
             setTimeout(() => {
                 const result = parseCSV(csv);
-                headers = result.headers;
-                checkinData = result.data;
                 
-                document.getElementById('checkinInfo').innerHTML = 
-                    `✅ Loaded: ${file.name}<br>Size: ${fileSize} MB<br>Records: ${checkinData.length.toLocaleString()}`;
-                document.getElementById('checkinBox').classList.add('loaded');
+                if (type === 'appointment') {
+                    appointmentData = result.data;
+                    document.getElementById('appointmentInfo').innerHTML = 
+                        `✅ Loaded: ${file.name}<br>Size: ${fileSize} MB<br>Records: ${appointmentData.length.toLocaleString()}`;
+                    document.getElementById('appointmentBox').classList.add('loaded');
+                    
+                    // Extract all unique services from appointment report
+                    extractAppointmentServices();
+                } else {
+                    checkinHeaders = result.headers;
+                    checkinData = result.data;
+                    document.getElementById('checkinInfo').innerHTML = 
+                        `✅ Loaded: ${file.name}<br>Size: ${fileSize} MB<br>Records: ${checkinData.length.toLocaleString()}`;
+                    document.getElementById('checkinBox').classList.add('loaded');
+                }
                 
-                document.getElementById('infoAlert').innerHTML = 
-                    `ℹ️ File loaded with ${checkinData.length.toLocaleString()} records. Select which services to keep below.`;
-                document.getElementById('infoAlert').style.display = 'block';
-                
-                buildServiceSelection();
-                document.getElementById('exportButton').disabled = false;
+                // If both files loaded, build service selection
+                if (appointmentData && checkinData) {
+                    document.getElementById('infoAlert').innerHTML = 
+                        `ℹ️ Both files loaded. Check-in services are compared against ${appointmentServices.size.toLocaleString()} unique appointment services.`;
+                    document.getElementById('infoAlert').style.display = 'block';
+                    
+                    buildServiceSelection();
+                    document.getElementById('exportButton').disabled = false;
+                }
             }, 100);
+        }
+        
+        function extractAppointmentServices() {
+            appointmentServices = new Set();
+            
+            for (const row of appointmentData) {
+                const reportedServices = row['Reported Services'] || '';
+                if (reportedServices) {
+                    // Split by comma, respecting parentheses
+                    const services = splitServicesRespectingParentheses(reportedServices);
+                    for (const service of services) {
+                        const trimmed = service.trim().toLowerCase();
+                        if (trimmed) {
+                            appointmentServices.add(trimmed);
+                        }
+                    }
+                }
+            }
+        }
+        
+        function splitServicesRespectingParentheses(servicesString) {
+            const result = [];
+            let current = '';
+            let parenDepth = 0;
+            
+            for (let i = 0; i < servicesString.length; i++) {
+                const char = servicesString[i];
+                
+                if (char === '(') {
+                    parenDepth++;
+                    current += char;
+                } else if (char === ')') {
+                    parenDepth--;
+                    current += char;
+                } else if (char === ',' && parenDepth === 0) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            
+            if (current.trim()) {
+                result.push(current.trim());
+            }
+            
+            return result;
+        }
+        
+        function serviceMatchesAppointment(serviceName) {
+            return appointmentServices.has(serviceName.toLowerCase().trim());
         }
 
         function parseCSV(csv) {
@@ -525,9 +651,12 @@
                     serviceData[careUnit][location] = {};
                 }
                 if (!serviceData[careUnit][location][service]) {
-                    serviceData[careUnit][location][service] = 0;
+                    serviceData[careUnit][location][service] = {
+                        count: 0,
+                        matches: serviceMatchesAppointment(service)
+                    };
                 }
-                serviceData[careUnit][location][service]++;
+                serviceData[careUnit][location][service].count++;
             }
             
             // Build the HTML
@@ -537,7 +666,7 @@
             for (const careUnit of sortedCareUnits) {
                 const locations = serviceData[careUnit];
                 const careUnitTotal = Object.values(locations).reduce((sum, loc) => 
-                    sum + Object.values(loc).reduce((s, c) => s + c, 0), 0);
+                    sum + Object.values(loc).reduce((s, svc) => s + svc.count, 0), 0);
                 
                 html += `<div class="care-unit-group">`;
                 html += `<div class="care-unit-header" onclick="toggleCareUnit(this)">
@@ -548,7 +677,7 @@
                 const sortedLocations = Object.keys(locations).sort();
                 for (const location of sortedLocations) {
                     const services = locations[location];
-                    const locationTotal = Object.values(services).reduce((s, c) => s + c, 0);
+                    const locationTotal = Object.values(services).reduce((s, svc) => s + svc.count, 0);
                     const locationId = generateServiceId(careUnit, location, '_location_');
                     
                     html += `<div class="location-group">`;
@@ -564,9 +693,13 @@
                     
                     const sortedServices = Object.keys(services).sort();
                     for (const service of sortedServices) {
-                        const count = services[service];
+                        const svcData = services[service];
                         const serviceId = generateServiceId(careUnit, location, service);
                         selectedServices.add(serviceId);
+                        
+                        const matchIndicator = svcData.matches 
+                            ? '<span class="match-indicator match-yes">✅</span>'
+                            : '<span class="match-indicator match-no">❌</span>';
                         
                         html += `<div class="service-item">
                             <input type="checkbox" id="${serviceId}" checked 
@@ -574,9 +707,11 @@
                                    data-care-unit="${escapeHtml(careUnit)}"
                                    data-location="${escapeHtml(location)}"
                                    data-service="${escapeHtml(service)}"
-                                   data-count="${count}">
+                                   data-count="${svcData.count}"
+                                   data-matches="${svcData.matches}">
+                            ${matchIndicator}
                             <label for="${serviceId}">${escapeHtml(service)}</label>
-                            <span class="service-count">(${count.toLocaleString()})</span>
+                            <span class="service-count">(${svcData.count.toLocaleString()})</span>
                         </div>`;
                     }
                     
@@ -658,6 +793,34 @@
             updateServiceSelectionSummary();
         }
         
+        function selectMatchingOnly() {
+            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                const matches = cb.dataset.matches === 'true';
+                cb.checked = matches;
+                if (matches) {
+                    selectedServices.add(cb.id);
+                } else {
+                    selectedServices.delete(cb.id);
+                }
+            });
+            updateServiceSelectionSummary();
+        }
+        
+        function selectNonMatchingOnly() {
+            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                const matches = cb.dataset.matches === 'true';
+                cb.checked = !matches;
+                if (!matches) {
+                    selectedServices.add(cb.id);
+                } else {
+                    selectedServices.delete(cb.id);
+                }
+            });
+            updateServiceSelectionSummary();
+        }
+        
         function updateServiceSelection() {
             const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
             selectedServices = new Set();
@@ -708,10 +871,10 @@
             }
             
             // Build CSV with original column structure
-            let csv = headers.map(h => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
+            let csv = checkinHeaders.map(h => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
             
             for (const row of filteredData) {
-                const values = headers.map(h => {
+                const values = checkinHeaders.map(h => {
                     const val = row[h] || '';
                     return `"${val.replace(/"/g, '""')}"`;
                 });
