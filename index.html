@@ -1,902 +1,833 @@
+<!--
+================================================================================
+  App:          LaGuardia Navigate Check-in Cleanup App
+  Version:      4.2
+  Released:     June 12, 2026
+  Developed by: Josh Goldblatt using Claude
+================================================================================
+  CHANGELOG (most recent first)
+--------------------------------------------------------------------------------
+  v4.2  2026-06-12
+    - Added summary table at the top of the duplicates section showing duplicate
+      counts per location (sorted by count descending), with columns for 
+      Location, Duplicates, and Clusters.
+  v4.1  2026-06-12
+    - Improved duplicates display: now shows clusters with the original record
+      (highlighted green) followed by its duplicate(s) (highlighted red).
+    - Removed "Original Time" column since the original record is now visible.
+    - Added "Type" column showing ORIGINAL or DUPLICATE labels.
+    - Duplicates count now shows "X duplicates in Y clusters" for clarity.
+    - Export Duplicates CSV now includes both original and duplicate records
+      with Type column for easy filtering.
+  v4.0  2026-06-12
+    - Added deduplication functionality: detects duplicate check-ins from the 
+      same student at the same location within a configurable time threshold
+      (default 60 minutes). Duplicates are automatically removed from export.
+    - Added collapsible "Duplicates to Remove" section showing all duplicate
+      records with details including the original check-in time they matched.
+    - Added "Export Duplicates CSV" button for auditing removed records.
+    - Added threshold input field (default 60 min, adjustable 1-1440 min).
+    - Results section now shows: After Service Filter, Clean Records, 
+      Original (Keep), Duplicates (Remove), and Final Export Count.
+    - Workflow changed to two-step: select services first, then click 
+      "Process & Find Duplicates" to run deduplication.
+    - Migrated to standard LaGuardia design system (Fraunces/Source Sans 3,
+      warm paper palette, accent colors, standardized components).
+  v3.0  2026-01-28
+    - Added appointment report upload to compare check-in services against
+      appointment services for exact matching.
+    - Added match indicators: ✅ for services that match an appointment 
+      service, ❌ for services with no matching appointment service.
+    - Added "Select Matching Only" and "Select Non-Matching Only" buttons.
+    - Service matching uses exact match logic (case-insensitive) and respects
+      commas inside parentheses (e.g., "Award Status (Pell, TAP, Scholarships)"
+      is treated as a single service name).
+  v2.0  2026-01-28
+    - Added data transformation rule: records with Care Unit "Advising" and 
+      Location "Transfer Support" are re-mapped to Care Unit "Transfer" and 
+      Location "Transfer Engagement Initiative" for display purposes.
+  v1.0  2026-01-28
+    - Initial release
+    - Upload check-in report CSV and filter by service selection
+    - Service selection UI grouped by Care Unit → Location
+    - All/None buttons per location for quick selection
+    - Global Select All / Deselect All buttons
+    - Record counts shown per service
+    - Export filtered CSV with original column structure preserved
+================================================================================
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Navigate Check-in Cleanup App - Version 3</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            padding: 40px;
-        }
-        
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        
-        h1 {
-            color: #2d3748;
-            margin-bottom: 10px;
-            font-size: 2em;
-        }
-        
-        .subtitle {
-            color: #718096;
-            margin-bottom: 5px;
-        }
-        
-        .upload-section {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .upload-box {
-            border: 2px dashed #cbd5e0;
-            border-radius: 8px;
-            padding: 30px;
-            text-align: center;
-            transition: all 0.3s ease;
-            background: #f7fafc;
-        }
-        
-        .upload-box:hover {
-            border-color: #667eea;
-            background: #f0f4ff;
-        }
-        
-        .upload-box.loaded {
-            border-color: #48bb78;
-            background: #f0fff4;
-            border-style: solid;
-        }
-        
-        .file-input {
-            display: none;
-        }
-        
-        .upload-label {
-            display: inline-block;
-            padding: 10px 20px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: transform 0.2s;
-            font-weight: 500;
-        }
-        
-        .upload-label:hover {
-            transform: translateY(-2px);
-        }
-        
-        .file-info {
-            margin-top: 15px;
-            padding: 10px;
-            background: white;
-            border-radius: 4px;
-            font-size: 0.9em;
-            color: #2d3748;
-        }
-        
-        .btn {
-            padding: 12px 30px;
-            border: none;
-            border-radius: 6px;
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-        }
-        
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
-        }
-        
-        .btn-secondary {
-            background: #48bb78;
-            color: white;
-        }
-        
-        .btn-secondary:hover:not(:disabled) {
-            background: #38a169;
-            transform: translateY(-2px);
-        }
-        
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .button-group {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin: 30px 0;
-        }
-        
-        /* Service Selection Styles */
-        .service-selection-section {
-            display: none;
-            margin: 30px 0;
-            border: 2px solid #667eea;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        
-        .service-selection-header {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            padding: 15px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        
-        .service-selection-header h3 {
-            margin: 0;
-            font-size: 1.1em;
-        }
-        
-        .service-selection-actions {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        
-        .service-selection-actions button {
-            padding: 6px 12px;
-            border: 1px solid white;
-            background: transparent;
-            color: white;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.85em;
-            transition: all 0.2s;
-        }
-        
-        .service-selection-actions button:hover {
-            background: white;
-            color: #667eea;
-        }
-        
-        .service-selection-content {
-            padding: 20px;
-            max-height: 500px;
-            overflow-y: auto;
-            background: #f8fafc;
-        }
-        
-        .care-unit-group {
-            margin-bottom: 20px;
-            background: white;
-            border-radius: 6px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-        
-        .care-unit-header {
-            background: #eef2ff;
-            padding: 12px 15px;
-            font-weight: 600;
-            color: #4338ca;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            border-bottom: 1px solid #e2e8f0;
-        }
-        
-        .care-unit-header:hover {
-            background: #e0e7ff;
-        }
-        
-        .care-unit-count {
-            font-size: 0.85em;
-            color: #6366f1;
-            font-weight: normal;
-        }
-        
-        .location-group {
-            border-bottom: 1px solid #f1f5f9;
-        }
-        
-        .location-group:last-child {
-            border-bottom: none;
-        }
-        
-        .location-header {
-            background: #f8fafc;
-            padding: 10px 15px 10px 30px;
-            font-weight: 500;
-            color: #475569;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .location-header:hover {
-            background: #f1f5f9;
-        }
-        
-        .location-actions {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .location-actions button {
-            padding: 3px 8px;
-            font-size: 0.75em;
-            border: 1px solid #cbd5e1;
-            background: white;
-            color: #475569;
-            border-radius: 3px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .location-actions button:hover {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
-        }
-        
-        .location-count {
-            font-size: 0.8em;
-            color: #64748b;
-            font-weight: normal;
-            min-width: 90px;
-            text-align: right;
-        }
-        
-        .service-list {
-            padding: 5px 15px 10px 45px;
-        }
-        
-        .service-item {
-            display: flex;
-            align-items: center;
-            padding: 6px 0;
-            gap: 10px;
-        }
-        
-        .service-item input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
-            cursor: pointer;
-        }
-        
-        .service-item label {
-            flex: 1;
-            cursor: pointer;
-            color: #334155;
-            font-size: 0.9em;
-        }
-        
-        .service-item .service-count {
-            color: #94a3b8;
-            font-size: 0.8em;
-            min-width: 80px;
-            text-align: right;
-        }
-        
-        .service-item .match-indicator {
-            font-size: 0.9em;
-            min-width: 20px;
-            text-align: center;
-        }
-        
-        .match-yes {
-            color: #16a34a;
-        }
-        
-        .match-no {
-            color: #dc2626;
-        }
-        
-        .service-selection-summary {
-            background: #f0fdf4;
-            border-top: 1px solid #bbf7d0;
-            padding: 15px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.95em;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        
-        .summary-stats {
-            color: #166534;
-        }
-        
-        .summary-stats strong {
-            color: #15803d;
-            font-size: 1.1em;
-        }
-        
-        .summary-total {
-            color: #6b7280;
-        }
-        
-        .match-legend {
-            display: flex;
-            gap: 15px;
-            font-size: 0.85em;
-            color: #475569;
-            padding: 10px 20px;
-            background: #fefce8;
-            border-top: 1px solid #fef08a;
-        }
-        
-        .match-legend span {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        
-        /* Alert Styles */
-        .alert {
-            padding: 15px 20px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            display: none;
-        }
-        
-        .alert-success {
-            background: #d1fae5;
-            color: #065f46;
-            border: 1px solid #6ee7b7;
-        }
-        
-        .alert-info {
-            background: #dbeafe;
-            color: #1e40af;
-            border: 1px solid #93c5fd;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LaGuardia Navigate Check-in Cleanup App v4.2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   DESIGN TOKENS
+   ========================================================================== */
+:root{
+  --ink:#22253a;
+  --ink-soft:#565b76;
+  --ink-faint:#8b8fa6;
+  --paper:#f7f4ee;
+  --card:#ffffff;
+  --line:#e4dfd4;
+  --accent:#b5482e;
+  --accent-dark:#9c3c25;
+  --accent-soft:#f3ddd6;
+  --teal:#2e6e72;
+  --teal-soft:#d9e8e8;
+  --gold:#c8922c;
+  --gold-deep:#8a6516;
+  --gold-soft:#f4ecd9;
+  --green:#3f7d57;
+  --green-soft:#dcecdf;
+  --radius:12px;
+  --shadow:0 1px 2px rgba(34,37,58,.06), 0 6px 18px -8px rgba(34,37,58,.12);
+  --font-display:'Fraunces', Georgia, serif;
+  --font-body:'Source Sans 3', 'Segoe UI', sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--font-body);background:var(--paper);color:var(--ink);font-size:15.5px;line-height:1.55;
+  background-image:radial-gradient(circle at 12% -10%, rgba(181,72,46,.05), transparent 40%),
+                   radial-gradient(circle at 95% 0%, rgba(46,110,114,.05), transparent 35%)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 80px}
+
+/* ---------- Headings & text ---------- */
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,4vw,42px);line-height:1.05;letter-spacing:-.5px}
+h1 .accent{color:var(--accent)}
+h2{font-family:var(--font-display);font-weight:600;font-size:24px;line-height:1.1;letter-spacing:-.2px}
+h3{font-family:var(--font-display);font-weight:600;font-size:18px;line-height:1.15}
+h4{font-family:var(--font-body);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-soft)}
+.lead{font-size:17px;color:var(--ink-soft);line-height:1.55;max-width:640px}
+.muted{color:var(--ink-faint)}
+
+/* ---------- Header ---------- */
+header{padding:38px 0 0}
+.brand-row{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:18px;
+  border-bottom:3px solid var(--ink);padding-bottom:22px}
+.subtitle{color:var(--ink-soft);margin-top:9px;max-width:640px;font-size:16px;line-height:1.5}
+.meta-box{font-size:12.5px;color:var(--ink-soft);line-height:1.7;display:grid;grid-template-columns:auto auto;gap:0 10px;align-content:end}
+.meta-box b{color:var(--ink);font-weight:600;text-align:right}
+.meta-box span{white-space:nowrap}
+
+/* ---------- Buttons ---------- */
+.btn{font-family:var(--font-body);font-size:13px;font-weight:600;line-height:1.2;cursor:pointer;transition:.15s;
+  display:inline-flex;align-items:center;gap:7px;padding:9px 20px;border-radius:999px;border:1.5px solid transparent}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover:not(:disabled){background:var(--accent-dark);border-color:var(--accent-dark)}
+.btn-secondary{background:none;color:var(--accent);border-color:var(--accent)}
+.btn-secondary:hover:not(:disabled){background:var(--accent);color:#fff}
+.btn-neutral{background:none;color:var(--ink-soft);border-color:var(--line)}
+.btn-neutral:hover:not(:disabled){border-color:var(--ink-faint);color:var(--ink)}
+.btn-teal{background:var(--teal);color:#fff;border-color:var(--teal)}
+.btn-teal:hover:not(:disabled){background:#256063;border-color:#256063}
+
+/* ---------- Form controls ---------- */
+.field{margin-bottom:14px;max-width:420px}
+.field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-soft);margin-bottom:4px}
+.field input[type=text],.field input[type=number],.field select{
+  width:100%;font-family:var(--font-body);font-size:14px;padding:8px 11px;
+  border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
+.field .hint{font-size:12px;color:var(--ink-faint);margin-top:4px}
+
+/* ---------- Panels & cards ---------- */
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px 26px;margin-bottom:26px}
+.panel h2{font-size:21px;margin-bottom:4px}
+.panel .note{font-size:13px;color:var(--ink-faint);margin-bottom:18px}
+
+/* ---------- Stat cards ---------- */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:26px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.stat::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
+.stat.teal::before{background:var(--teal)}
+.stat.gold::before{background:var(--gold)}
+.stat.green::before{background:var(--green)}
+.stat.ink::before{background:var(--ink)}
+.stat .num{font-family:var(--font-display);font-size:32px;font-weight:700;line-height:1}
+.stat .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin-top:6px;font-weight:600}
+
+/* ---------- Table ---------- */
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);background:var(--card)}
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);
+  font-weight:700;padding:10px 14px;border-bottom:2px solid var(--line);background:var(--paper);white-space:nowrap}
+.tbl tbody td{padding:10px 14px;border-bottom:1px solid var(--line);color:var(--ink-soft)}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover{background:var(--paper)}
+
+/* Duplicate cluster highlighting */
+.tbl tbody tr.row-original td{background:var(--green-soft);color:var(--green)}
+.tbl tbody tr.row-original:hover td{background:#c8e0cc}
+.tbl tbody tr.row-duplicate td{background:var(--accent-soft);color:var(--accent)}
+.tbl tbody tr.row-duplicate:hover td{background:#eaccc5}
+.cluster-spacer td{height:8px;background:var(--paper);border:none!important}
+
+/* ---------- Collapsible section ---------- */
+.dept-section{margin-bottom:18px}
+.dept-head{display:flex;align-items:center;gap:14px;background:var(--ink);color:#fff;border-radius:var(--radius);
+  padding:13px 20px;cursor:pointer;user-select:none;transition:.15s}
+.dept-head:hover{background:#33375a}
+.dept-head h3{font-size:18px;flex:1;color:#fff}
+.dept-head .counts{font-size:12.5px;opacity:.85;white-space:nowrap}
+.dept-head .chev{transition:transform .2s;font-size:13px}
+.dept-section.open .chev{transform:rotate(90deg)}
+.dept-body{display:none;padding-top:12px}
+.dept-section.open .dept-body{display:block}
+
+/* Danger variant for duplicates */
+.dept-head.danger{background:var(--accent)}
+.dept-head.danger:hover{background:var(--accent-dark)}
+
+/* ---------- Status badges ---------- */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;letter-spacing:.03em;
+  padding:3px 10px;border-radius:6px;text-transform:uppercase}
+.badge .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.badge.ok{background:var(--green-soft);color:var(--green)}
+.badge.info{background:var(--teal-soft);color:var(--teal)}
+.badge.warn{background:var(--gold-soft);color:var(--gold-deep)}
+.badge.danger{background:var(--accent-soft);color:var(--accent)}
+
+/* ---------- Upload boxes ---------- */
+.upload-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin:30px 0}
+.upload-box{background:var(--card);border:2px dashed var(--line);border-radius:var(--radius);padding:30px 24px;text-align:center;transition:.2s}
+.upload-box:hover{border-color:var(--ink-faint);background:var(--paper)}
+.upload-box.loaded{border-color:var(--green);border-style:solid;background:var(--green-soft)}
+.upload-box h3{font-size:17px;margin-bottom:6px}
+.upload-box p{font-size:13px;color:var(--ink-faint);margin-bottom:14px}
+.upload-box .file-input{display:none}
+.upload-box .upload-label{display:inline-block;padding:9px 20px;background:var(--accent);color:#fff;
+  border-radius:999px;cursor:pointer;font-weight:600;font-size:13px;transition:.15s}
+.upload-box .upload-label:hover{background:var(--accent-dark)}
+.upload-box .file-info{margin-top:14px;padding:10px 14px;background:var(--paper);border-radius:8px;font-size:13px;color:var(--ink-soft);text-align:left}
+.upload-box.loaded .file-info{background:var(--card)}
+
+/* ---------- Service selection section ---------- */
+.service-section{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:26px}
+.service-header{background:var(--ink);color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.service-header h3{color:#fff;font-size:17px}
+.service-header .actions{display:flex;gap:8px;flex-wrap:wrap}
+.service-header .actions button{padding:6px 14px;font-size:12px;border:1px solid rgba(255,255,255,.5);
+  background:transparent;color:#fff;border-radius:999px;cursor:pointer;font-weight:600;transition:.15s}
+.service-header .actions button:hover{background:#fff;color:var(--ink)}
+.match-legend{display:flex;gap:18px;padding:12px 20px;background:var(--gold-soft);border-bottom:1px solid var(--line);font-size:13px;color:var(--ink-soft)}
+.match-legend span{display:flex;align-items:center;gap:6px}
+.service-content{max-height:450px;overflow-y:auto;padding:16px 20px;background:var(--paper)}
+.service-summary{background:var(--green-soft);padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;font-size:14px;border-top:1px solid var(--line)}
+.service-summary strong{color:var(--green);font-size:18px}
+
+/* Care unit / location groups */
+.care-unit{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:14px;overflow:hidden}
+.care-unit-head{background:var(--paper);padding:12px 16px;font-weight:600;color:var(--ink);display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-bottom:1px solid var(--line)}
+.care-unit-head:hover{background:#f0ede6}
+.care-unit-head .count{font-size:13px;color:var(--ink-faint);font-weight:500}
+.location-group{border-bottom:1px solid var(--line)}
+.location-group:last-child{border-bottom:none}
+.location-head{padding:10px 16px 10px 28px;display:flex;justify-content:space-between;align-items:center;background:var(--card)}
+.location-head:hover{background:var(--paper)}
+.location-head span{font-weight:500;color:var(--ink-soft)}
+.location-actions{display:flex;align-items:center;gap:8px}
+.location-actions button{padding:3px 10px;font-size:11px;border:1px solid var(--line);background:var(--card);color:var(--ink-soft);border-radius:4px;cursor:pointer;transition:.15s}
+.location-actions button:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.location-count{font-size:12px;color:var(--ink-faint);min-width:80px;text-align:right}
+.service-list{padding:8px 16px 12px 44px;background:var(--card)}
+.service-item{display:flex;align-items:center;padding:5px 0;gap:10px}
+.service-item input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
+.service-item label{flex:1;cursor:pointer;color:var(--ink-soft);font-size:14px}
+.service-item .svc-count{color:var(--ink-faint);font-size:12px;min-width:60px;text-align:right}
+.match-yes{color:var(--green)}
+.match-no{color:var(--accent)}
+
+/* ---------- Settings panel ---------- */
+.settings-panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 24px;margin-bottom:26px}
+.settings-panel h3{margin-bottom:14px}
+.threshold-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.threshold-row input{width:80px;padding:8px 10px;font-size:14px;border:1.5px solid var(--line);border-radius:8px;text-align:center}
+.threshold-row input:focus{outline:none;border-color:var(--accent)}
+.threshold-row span{color:var(--ink-soft)}
+
+/* ---------- Button row ---------- */
+.btn-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:30px 0}
+
+/* ---------- Alerts ---------- */
+.alert{padding:14px 18px;border-radius:var(--radius);margin-bottom:20px;font-size:14px;display:none}
+.alert.info{background:var(--teal-soft);color:var(--teal);border:1px solid var(--teal)}
+.alert.success{background:var(--green-soft);color:var(--green);border:1px solid var(--green)}
+
+/* ---------- Section labels ---------- */
+.sec-label{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink-faint);
+  text-transform:uppercase;letter-spacing:.12em;margin:38px 0 14px}
+
+/* ---------- Responsive ---------- */
+@media(max-width:600px){
+  .wrap{padding:0 16px 60px}
+  .brand-row{flex-direction:column;align-items:flex-start}
+  .meta-box{margin-top:12px}
+}
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🧹 Navigate Check-in Cleanup App</h1>
-            <div class="subtitle">Version 3 - Released January 28, 2026</div>
-            <div class="subtitle">Developed by Josh Goldblatt using Claude</div>
-        </div>
-        
-        <div class="alert alert-info" id="infoAlert"></div>
-        <div class="alert alert-success" id="successAlert"></div>
-        
-        <div class="upload-section">
-            <div class="upload-box" id="appointmentBox">
-                <h3>📅 Upload Appointment Report</h3>
-                <p style="color: #718096; margin: 10px 0;">CSV file exported from Navigate</p>
-                <input type="file" id="appointmentFile" class="file-input" accept=".csv">
-                <label for="appointmentFile" class="upload-label">Choose File</label>
-                <div id="appointmentInfo" class="file-info" style="display: none;"></div>
-            </div>
-            <div class="upload-box" id="checkinBox">
-                <h3>📋 Upload Check-in Report</h3>
-                <p style="color: #718096; margin: 10px 0;">CSV file exported from Navigate</p>
-                <input type="file" id="checkinFile" class="file-input" accept=".csv">
-                <label for="checkinFile" class="upload-label">Choose File</label>
-                <div id="checkinInfo" class="file-info" style="display: none;"></div>
-            </div>
-        </div>
-        
-        <!-- Service Selection Section -->
-        <div class="service-selection-section" id="serviceSelectionSection">
-            <div class="service-selection-header">
-                <h3>📋 Select Check-in Services to Keep</h3>
-                <div class="service-selection-actions">
-                    <button onclick="selectAllServices()">Select All</button>
-                    <button onclick="deselectAllServices()">Deselect All</button>
-                    <button onclick="selectMatchingOnly()">Select Matching Only</button>
-                    <button onclick="selectNonMatchingOnly()">Select Non-Matching Only</button>
-                </div>
-            </div>
-            <div class="match-legend">
-                <span><span class="match-yes">✅</span> Matches an appointment service</span>
-                <span><span class="match-no">❌</span> No matching appointment service</span>
-            </div>
-            <div class="service-selection-content" id="serviceSelectionContent">
-                <!-- Populated dynamically -->
-            </div>
-            <div class="service-selection-summary">
-                <div class="summary-stats">
-                    <strong id="selectedRecordCount">0</strong> records selected
-                </div>
-                <div class="summary-total">
-                    out of <strong id="totalRecordCount">0</strong> total records
-                </div>
-            </div>
-        </div>
-        
-        <div class="button-group">
-            <button class="btn btn-secondary" id="exportButton" disabled>Export Filtered Check-ins</button>
-        </div>
+<div class="wrap">
+
+  <!-- ===================== HEADER ===================== -->
+  <header>
+    <div class="brand-row">
+      <div>
+        <h1>Navigate <span class="accent">Check-in Cleanup</span> App</h1>
+        <p class="subtitle">Filter check-in records by service, compare against appointment data, and remove duplicates for accurate student activity reporting.</p>
+      </div>
+      <div class="meta-box">
+        <b>Version:</b><span>4.2</span>
+        <b>Released:</b><span>June 12, 2026</span>
+        <b>Developed by:</b><span>Josh Goldblatt using Claude</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================== ALERTS ===================== -->
+  <div class="alert info" id="infoAlert"></div>
+  <div class="alert success" id="successAlert"></div>
+
+  <!-- ===================== FILE UPLOAD ===================== -->
+  <div class="sec-label">Upload Files</div>
+  <div class="upload-grid">
+    <div class="upload-box" id="appointmentBox">
+      <h3>📅 Appointment Report</h3>
+      <p>CSV export from Navigate</p>
+      <input type="file" id="appointmentFile" class="file-input" accept=".csv">
+      <label for="appointmentFile" class="upload-label">Choose File</label>
+      <div id="appointmentInfo" class="file-info" style="display:none"></div>
+    </div>
+    <div class="upload-box" id="checkinBox">
+      <h3>📋 Check-in Report</h3>
+      <p>CSV export from Navigate</p>
+      <input type="file" id="checkinFile" class="file-input" accept=".csv">
+      <label for="checkinFile" class="upload-label">Choose File</label>
+      <div id="checkinInfo" class="file-info" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- ===================== SERVICE SELECTION ===================== -->
+  <div class="service-section" id="serviceSection" style="display:none">
+    <div class="service-header">
+      <h3>Step 1: Select Check-in Services to Keep</h3>
+      <div class="actions">
+        <button onclick="selectAllServices()">Select All</button>
+        <button onclick="deselectAllServices()">Deselect All</button>
+        <button onclick="selectMatchingOnly()">Matching Only</button>
+        <button onclick="selectNonMatchingOnly()">Non-Matching Only</button>
+      </div>
+    </div>
+    <div class="match-legend">
+      <span><span class="match-yes">✅</span> Matches appointment service</span>
+      <span><span class="match-no">❌</span> No match found</span>
+    </div>
+    <div class="service-content" id="serviceContent"></div>
+    <div class="service-summary">
+      <div><strong id="selectedCount">0</strong> records selected</div>
+      <div class="muted">out of <strong id="totalCount">0</strong> total</div>
+    </div>
+  </div>
+
+  <!-- ===================== DEDUP SETTINGS ===================== -->
+  <div class="settings-panel" id="settingsPanel" style="display:none">
+    <h3>⏱️ Step 2: Duplicate Detection</h3>
+    <div class="threshold-row">
+      <span>Time threshold:</span>
+      <input type="number" id="thresholdInput" value="60" min="1" max="1440">
+      <span>minutes</span>
+    </div>
+    <p class="hint" style="margin-top:10px">Check-ins from the same student at the same location within this window are flagged as duplicates. The earliest is kept; later ones are removed.</p>
+  </div>
+
+  <div class="btn-row" id="processRow" style="display:none">
+    <button class="btn btn-primary" onclick="processData()">Process &amp; Find Duplicates</button>
+  </div>
+
+  <!-- ===================== RESULTS ===================== -->
+  <div id="resultsSection" style="display:none">
+    <div class="sec-label">Results</div>
+    <div class="stat-grid">
+      <div class="stat"><div class="num" id="statFiltered">0</div><div class="lbl">After Filter</div></div>
+      <div class="stat green"><div class="num" id="statClean">0</div><div class="lbl">Clean</div></div>
+      <div class="stat gold"><div class="num" id="statOriginal">0</div><div class="lbl">Original (Keep)</div></div>
+      <div class="stat" style="--accent:var(--accent)"><div class="num" id="statDuplicate">0</div><div class="lbl">Duplicates</div></div>
+      <div class="stat teal"><div class="num" id="statFinal">0</div><div class="lbl">Final Count</div></div>
     </div>
 
-    <script>
-        // Global variables
-        let appointmentData = null;
-        let checkinData = null;
-        let checkinHeaders = [];
-        let selectedServices = new Set();
-        let serviceData = {};
-        let appointmentServices = new Set(); // All unique services from appointment report
+    <!-- Duplicates collapsible -->
+    <div class="dept-section" id="dupSection" style="display:none">
+      <div class="dept-head danger" onclick="document.getElementById('dupSection').classList.toggle('open')">
+        <span class="chev">▶</span>
+        <h3>Duplicates to Remove</h3>
+        <span class="counts" id="dupCount">0 records</span>
+        <button class="btn btn-neutral" style="margin-left:auto;padding:6px 14px;font-size:12px" onclick="event.stopPropagation();exportDuplicates()">Export CSV</button>
+      </div>
+      <div class="dept-body">
+        <p class="muted" style="margin-bottom:14px;font-size:13px">These records are duplicates and will be excluded from the export.</p>
+        
+        <!-- Summary by Location -->
+        <div class="table-wrap" style="margin-bottom:20px">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Location</th>
+                <th style="text-align:right">Duplicates</th>
+                <th style="text-align:right">Clusters</th>
+              </tr>
+            </thead>
+            <tbody id="dupSummaryBody"></tbody>
+          </table>
+        </div>
+        
+        <h4 style="margin-bottom:12px">Duplicate Details</h4>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Student Name</th>
+                <th>Student ID</th>
+                <th>Location</th>
+                <th>Check In Date</th>
+                <th>Check In Time</th>
+                <th>Service</th>
+              </tr>
+            </thead>
+            <tbody id="dupTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
-        // File input handlers
-        document.getElementById('appointmentFile').addEventListener('change', function(e) {
-            handleFileUpload(e, 'appointment');
-        });
-        
-        document.getElementById('checkinFile').addEventListener('change', function(e) {
-            handleFileUpload(e, 'checkin');
-        });
+    <div class="btn-row">
+      <button class="btn btn-teal" onclick="exportCleanedData()">Export Cleaned Check-ins</button>
+    </div>
+  </div>
 
-        document.getElementById('exportButton').addEventListener('click', exportFilteredData);
+</div>
 
-        function handleFileUpload(event, type) {
-            const file = event.target.files[0];
-            if (!file) return;
+<script>
+// Global state
+let appointmentData = null;
+let checkinData = null;
+let checkinHeaders = [];
+let selectedServices = new Set();
+let serviceData = {};
+let appointmentServices = new Set();
 
-            const fileSize = (file.size / 1024 / 1024).toFixed(2);
-            
-            if (type === 'appointment') {
-                document.getElementById('appointmentInfo').innerHTML = `⏳ Loading file (${fileSize} MB)...`;
-                document.getElementById('appointmentInfo').style.display = 'block';
-            } else {
-                document.getElementById('checkinInfo').innerHTML = `⏳ Loading file (${fileSize} MB)...`;
-                document.getElementById('checkinInfo').style.display = 'block';
-            }
+// Results
+let filteredData = [];
+let cleanRecords = [];
+let originalRecords = [];
+let duplicateRecords = [];
+let duplicateClusters = []; // Array of { original: record, duplicates: [records] }
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const csv = e.target.result;
-                parseCSVAsync(csv, file, fileSize, type);
-            };
-            reader.readAsText(file);
-        }
+// File handlers
+document.getElementById('appointmentFile').addEventListener('change', e => handleFile(e, 'appointment'));
+document.getElementById('checkinFile').addEventListener('change', e => handleFile(e, 'checkin'));
 
-        function parseCSVAsync(csv, file, fileSize, type) {
-            setTimeout(() => {
-                const result = parseCSV(csv);
-                
-                if (type === 'appointment') {
-                    appointmentData = result.data;
-                    document.getElementById('appointmentInfo').innerHTML = 
-                        `✅ Loaded: ${file.name}<br>Size: ${fileSize} MB<br>Records: ${appointmentData.length.toLocaleString()}`;
-                    document.getElementById('appointmentBox').classList.add('loaded');
-                    
-                    // Extract all unique services from appointment report
-                    extractAppointmentServices();
-                } else {
-                    checkinHeaders = result.headers;
-                    checkinData = result.data;
-                    document.getElementById('checkinInfo').innerHTML = 
-                        `✅ Loaded: ${file.name}<br>Size: ${fileSize} MB<br>Records: ${checkinData.length.toLocaleString()}`;
-                    document.getElementById('checkinBox').classList.add('loaded');
-                }
-                
-                // If both files loaded, build service selection
-                if (appointmentData && checkinData) {
-                    document.getElementById('infoAlert').innerHTML = 
-                        `ℹ️ Both files loaded. Check-in services are compared against ${appointmentServices.size.toLocaleString()} unique appointment services.`;
-                    document.getElementById('infoAlert').style.display = 'block';
-                    
-                    buildServiceSelection();
-                    document.getElementById('exportButton').disabled = false;
-                }
-            }, 100);
-        }
-        
-        function extractAppointmentServices() {
-            appointmentServices = new Set();
-            
-            for (const row of appointmentData) {
-                const reportedServices = row['Reported Services'] || '';
-                if (reportedServices) {
-                    // Split by comma, respecting parentheses
-                    const services = splitServicesRespectingParentheses(reportedServices);
-                    for (const service of services) {
-                        const trimmed = service.trim().toLowerCase();
-                        if (trimmed) {
-                            appointmentServices.add(trimmed);
-                        }
-                    }
-                }
-            }
-        }
-        
-        function splitServicesRespectingParentheses(servicesString) {
-            const result = [];
-            let current = '';
-            let parenDepth = 0;
-            
-            for (let i = 0; i < servicesString.length; i++) {
-                const char = servicesString[i];
-                
-                if (char === '(') {
-                    parenDepth++;
-                    current += char;
-                } else if (char === ')') {
-                    parenDepth--;
-                    current += char;
-                } else if (char === ',' && parenDepth === 0) {
-                    result.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            
-            if (current.trim()) {
-                result.push(current.trim());
-            }
-            
-            return result;
-        }
-        
-        function serviceMatchesAppointment(serviceName) {
-            return appointmentServices.has(serviceName.toLowerCase().trim());
-        }
+function handleFile(event, type) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const size = (file.size / 1024 / 1024).toFixed(2);
+  const infoEl = document.getElementById(type === 'appointment' ? 'appointmentInfo' : 'checkinInfo');
+  infoEl.innerHTML = '⏳ Loading...';
+  infoEl.style.display = 'block';
 
-        function parseCSV(csv) {
-            const lines = csv.split(/\r?\n/);
-            const headers = [];
-            const data = [];
-            
-            for (let i = 0; i < lines.length; i++) {
-                if (!lines[i]) continue;
-                
-                const row = parseCSVLine(lines[i]);
-                
-                if (i === 0) {
-                    headers.push(...row);
-                } else {
-                    const obj = {};
-                    for (let k = 0; k < headers.length; k++) {
-                        obj[headers[k]] = row[k] || '';
-                    }
-                    data.push(obj);
-                }
-            }
-            
-            return { headers, data };
-        }
+  const reader = new FileReader();
+  reader.onload = e => {
+    setTimeout(() => {
+      const result = parseCSV(e.target.result);
+      if (type === 'appointment') {
+        appointmentData = result.data;
+        extractAppointmentServices();
+        document.getElementById('appointmentBox').classList.add('loaded');
+        infoEl.innerHTML = `✅ <b>${file.name}</b><br>${size} MB · ${appointmentData.length.toLocaleString()} records`;
+      } else {
+        checkinHeaders = result.headers;
+        checkinData = result.data;
+        document.getElementById('checkinBox').classList.add('loaded');
+        infoEl.innerHTML = `✅ <b>${file.name}</b><br>${size} MB · ${checkinData.length.toLocaleString()} records`;
+      }
+      if (appointmentData && checkinData) {
+        document.getElementById('infoAlert').innerHTML = `Both files loaded. Comparing against ${appointmentServices.size.toLocaleString()} unique appointment services.`;
+        document.getElementById('infoAlert').style.display = 'block';
+        buildServiceSelection();
+        document.getElementById('serviceSection').style.display = 'block';
+        document.getElementById('settingsPanel').style.display = 'block';
+        document.getElementById('processRow').style.display = 'flex';
+      }
+    }, 50);
+  };
+  reader.readAsText(file);
+}
 
-        function parseCSVLine(line) {
-            const result = [];
-            let current = '';
-            let inQuotes = false;
-            
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
-                const nextChar = line[i + 1];
-                
-                if (char === '"') {
-                    if (inQuotes && nextChar === '"') {
-                        current += '"';
-                        i++;
-                    } else {
-                        inQuotes = !inQuotes;
-                    }
-                } else if (char === ',' && !inQuotes) {
-                    result.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            
-            result.push(current.trim());
-            return result;
-        }
+function parseCSV(csv) {
+  const lines = csv.split(/\r?\n/);
+  const headers = [];
+  const data = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i]) continue;
+    const row = parseCSVLine(lines[i]);
+    if (i === 0) headers.push(...row);
+    else {
+      const obj = {};
+      for (let k = 0; k < headers.length; k++) obj[headers[k]] = row[k] || '';
+      data.push(obj);
+    }
+  }
+  return { headers, data };
+}
 
-        function buildServiceSelection() {
-            serviceData = {};
-            selectedServices = new Set();
-            
-            // Build hierarchical structure: Care Unit > Location > Services
-            for (const row of checkinData) {
-                let careUnit = row['Care Unit'] || 'Unknown';
-                let location = row['Location'] || 'Unknown';
-                const service = row['Student Services'] || '';
-                
-                // Transform: Advising/Transfer Support -> Transfer/Transfer Engagement Initiative
-                if (careUnit === 'Advising' && location === 'Transfer Support') {
-                    careUnit = 'Transfer';
-                    location = 'Transfer Engagement Initiative';
-                }
-                
-                if (!service) continue;
-                
-                if (!serviceData[careUnit]) {
-                    serviceData[careUnit] = {};
-                }
-                if (!serviceData[careUnit][location]) {
-                    serviceData[careUnit][location] = {};
-                }
-                if (!serviceData[careUnit][location][service]) {
-                    serviceData[careUnit][location][service] = {
-                        count: 0,
-                        matches: serviceMatchesAppointment(service)
-                    };
-                }
-                serviceData[careUnit][location][service].count++;
-            }
-            
-            // Build the HTML
-            let html = '';
-            const sortedCareUnits = Object.keys(serviceData).sort();
-            
-            for (const careUnit of sortedCareUnits) {
-                const locations = serviceData[careUnit];
-                const careUnitTotal = Object.values(locations).reduce((sum, loc) => 
-                    sum + Object.values(loc).reduce((s, svc) => s + svc.count, 0), 0);
-                
-                html += `<div class="care-unit-group">`;
-                html += `<div class="care-unit-header" onclick="toggleCareUnit(this)">
-                    <span>📁 ${escapeHtml(careUnit)}</span>
-                    <span class="care-unit-count">${careUnitTotal.toLocaleString()} records</span>
-                </div>`;
-                
-                const sortedLocations = Object.keys(locations).sort();
-                for (const location of sortedLocations) {
-                    const services = locations[location];
-                    const locationTotal = Object.values(services).reduce((s, svc) => s + svc.count, 0);
-                    const locationId = generateServiceId(careUnit, location, '_location_');
-                    
-                    html += `<div class="location-group">`;
-                    html += `<div class="location-header">
-                        <span onclick="toggleLocation(this.parentElement)" style="cursor: pointer; flex: 1;">📍 ${escapeHtml(location)}</span>
-                        <div class="location-actions">
-                            <button onclick="event.stopPropagation(); selectLocationServices('${locationId}', true)">All</button>
-                            <button onclick="event.stopPropagation(); selectLocationServices('${locationId}', false)">None</button>
-                            <span class="location-count">${locationTotal.toLocaleString()} records</span>
-                        </div>
-                    </div>`;
-                    html += `<div class="service-list" data-location-id="${locationId}">`;
-                    
-                    const sortedServices = Object.keys(services).sort();
-                    for (const service of sortedServices) {
-                        const svcData = services[service];
-                        const serviceId = generateServiceId(careUnit, location, service);
-                        selectedServices.add(serviceId);
-                        
-                        const matchIndicator = svcData.matches 
-                            ? '<span class="match-indicator match-yes">✅</span>'
-                            : '<span class="match-indicator match-no">❌</span>';
-                        
-                        html += `<div class="service-item">
-                            <input type="checkbox" id="${serviceId}" checked 
-                                   onchange="updateServiceSelection()" 
-                                   data-care-unit="${escapeHtml(careUnit)}"
-                                   data-location="${escapeHtml(location)}"
-                                   data-service="${escapeHtml(service)}"
-                                   data-count="${svcData.count}"
-                                   data-matches="${svcData.matches}">
-                            ${matchIndicator}
-                            <label for="${serviceId}">${escapeHtml(service)}</label>
-                            <span class="service-count">(${svcData.count.toLocaleString()})</span>
-                        </div>`;
-                    }
-                    
-                    html += `</div></div>`;
-                }
-                
-                html += `</div>`;
-            }
-            
-            document.getElementById('serviceSelectionContent').innerHTML = html;
-            document.getElementById('serviceSelectionSection').style.display = 'block';
-            document.getElementById('totalRecordCount').textContent = checkinData.length.toLocaleString();
-            updateServiceSelectionSummary();
-        }
-        
-        function generateServiceId(careUnit, location, service) {
-            const combined = `${careUnit}|${location}|${service}`;
-            let hash = 0;
-            for (let i = 0; i < combined.length; i++) {
-                const char = combined.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash;
-            }
-            return 'svc_' + Math.abs(hash).toString(36);
-        }
-        
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-        
-        function toggleCareUnit(header) {
-            const group = header.parentElement;
-            const locationGroups = group.querySelectorAll('.location-group');
-            const isCollapsed = locationGroups[0]?.style.display === 'none';
-            
-            locationGroups.forEach(lg => {
-                lg.style.display = isCollapsed ? 'block' : 'none';
-            });
-        }
-        
-        function toggleLocation(header) {
-            const serviceList = header.nextElementSibling;
-            serviceList.style.display = serviceList.style.display === 'none' ? 'block' : 'none';
-        }
-        
-        function selectLocationServices(locationId, selectAll) {
-            const serviceList = document.querySelector(`[data-location-id="${locationId}"]`);
-            if (!serviceList) return;
-            
-            const checkboxes = serviceList.querySelectorAll('input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                cb.checked = selectAll;
-                if (selectAll) {
-                    selectedServices.add(cb.id);
-                } else {
-                    selectedServices.delete(cb.id);
-                }
-            });
-            updateServiceSelectionSummary();
-        }
-        
-        function selectAllServices() {
-            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                cb.checked = true;
-                selectedServices.add(cb.id);
-            });
-            updateServiceSelectionSummary();
-        }
-        
-        function deselectAllServices() {
-            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                cb.checked = false;
-                selectedServices.delete(cb.id);
-            });
-            updateServiceSelectionSummary();
-        }
-        
-        function selectMatchingOnly() {
-            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                const matches = cb.dataset.matches === 'true';
-                cb.checked = matches;
-                if (matches) {
-                    selectedServices.add(cb.id);
-                } else {
-                    selectedServices.delete(cb.id);
-                }
-            });
-            updateServiceSelectionSummary();
-        }
-        
-        function selectNonMatchingOnly() {
-            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                const matches = cb.dataset.matches === 'true';
-                cb.checked = !matches;
-                if (!matches) {
-                    selectedServices.add(cb.id);
-                } else {
-                    selectedServices.delete(cb.id);
-                }
-            });
-            updateServiceSelectionSummary();
-        }
-        
-        function updateServiceSelection() {
-            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
-            selectedServices = new Set();
-            checkboxes.forEach(cb => {
-                if (cb.checked) {
-                    selectedServices.add(cb.id);
-                }
-            });
-            updateServiceSelectionSummary();
-        }
-        
-        function updateServiceSelectionSummary() {
-            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
-            let totalRecords = 0;
-            
-            checkboxes.forEach(cb => {
-                if (cb.checked) {
-                    totalRecords += parseInt(cb.dataset.count, 10) || 0;
-                }
-            });
-            
-            document.getElementById('selectedRecordCount').textContent = totalRecords.toLocaleString();
-        }
-        
-        function getSelectedServicesList() {
-            const selected = new Set();
-            const checkboxes = document.querySelectorAll('#serviceSelectionContent input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                if (cb.checked) {
-                    selected.add(cb.dataset.service);
-                }
-            });
-            return selected;
-        }
+function parseCSVLine(line) {
+  const result = [];
+  let current = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i], next = line[i + 1];
+    if (c === '"') {
+      if (inQuotes && next === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (c === ',' && !inQuotes) { result.push(current.trim()); current = ''; }
+    else current += c;
+  }
+  result.push(current.trim());
+  return result;
+}
 
-        function exportFilteredData() {
-            const selectedServiceNames = getSelectedServicesList();
-            
-            // Filter data
-            const filteredData = checkinData.filter(row => {
-                const service = row['Student Services'] || '';
-                return selectedServiceNames.has(service);
-            });
-            
-            if (filteredData.length === 0) {
-                alert('No records selected. Please select at least one service to export.');
-                return;
-            }
-            
-            // Build CSV with original column structure
-            let csv = checkinHeaders.map(h => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
-            
-            for (const row of filteredData) {
-                const values = checkinHeaders.map(h => {
-                    const val = row[h] || '';
-                    return `"${val.replace(/"/g, '""')}"`;
-                });
-                csv += values.join(',') + '\n';
-            }
-            
-            // Download
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `checkin_filtered_${new Date().toISOString().slice(0, 10)}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            // Show success message
-            document.getElementById('successAlert').innerHTML = 
-                `✅ Exported ${filteredData.length.toLocaleString()} records to CSV`;
-            document.getElementById('successAlert').style.display = 'block';
+function extractAppointmentServices() {
+  appointmentServices = new Set();
+  for (const row of appointmentData) {
+    const svc = row['Reported Services'] || '';
+    if (svc) {
+      for (const s of splitServices(svc)) {
+        const t = s.trim().toLowerCase();
+        if (t) appointmentServices.add(t);
+      }
+    }
+  }
+}
+
+function splitServices(str) {
+  const result = [];
+  let current = '', depth = 0;
+  for (const c of str) {
+    if (c === '(') { depth++; current += c; }
+    else if (c === ')') { depth--; current += c; }
+    else if (c === ',' && depth === 0) { result.push(current.trim()); current = ''; }
+    else current += c;
+  }
+  if (current.trim()) result.push(current.trim());
+  return result;
+}
+
+function matchesAppointment(svc) {
+  return appointmentServices.has(svc.toLowerCase().trim());
+}
+
+function buildServiceSelection() {
+  serviceData = {};
+  selectedServices = new Set();
+  for (const row of checkinData) {
+    let cu = row['Care Unit'] || 'Unknown';
+    let loc = row['Location'] || 'Unknown';
+    const svc = row['Student Services'] || '';
+    if (cu === 'Advising' && loc === 'Transfer Support') { cu = 'Transfer'; loc = 'Transfer Engagement Initiative'; }
+    if (!svc) continue;
+    if (!serviceData[cu]) serviceData[cu] = {};
+    if (!serviceData[cu][loc]) serviceData[cu][loc] = {};
+    if (!serviceData[cu][loc][svc]) serviceData[cu][loc][svc] = { count: 0, matches: matchesAppointment(svc) };
+    serviceData[cu][loc][svc].count++;
+  }
+
+  let html = '';
+  for (const cu of Object.keys(serviceData).sort()) {
+    const locs = serviceData[cu];
+    const cuTotal = Object.values(locs).reduce((s, l) => s + Object.values(l).reduce((x, v) => x + v.count, 0), 0);
+    html += `<div class="care-unit"><div class="care-unit-head" onclick="toggleCU(this)"><span>📁 ${esc(cu)}</span><span class="count">${cuTotal.toLocaleString()} records</span></div>`;
+    for (const loc of Object.keys(locs).sort()) {
+      const svcs = locs[loc];
+      const locTotal = Object.values(svcs).reduce((s, v) => s + v.count, 0);
+      const locId = hashId(cu, loc, '_loc_');
+      html += `<div class="location-group"><div class="location-head"><span onclick="toggleLoc(this)">📍 ${esc(loc)}</span><div class="location-actions"><button onclick="selLoc('${locId}',true)">All</button><button onclick="selLoc('${locId}',false)">None</button><span class="location-count">${locTotal.toLocaleString()}</span></div></div>`;
+      html += `<div class="service-list" data-loc="${locId}">`;
+      for (const svc of Object.keys(svcs).sort()) {
+        const d = svcs[svc];
+        const id = hashId(cu, loc, svc);
+        selectedServices.add(id);
+        const icon = d.matches ? '<span class="match-yes">✅</span>' : '<span class="match-no">❌</span>';
+        html += `<div class="service-item"><input type="checkbox" id="${id}" checked onchange="updateSel()" data-cu="${esc(cu)}" data-loc="${esc(loc)}" data-svc="${esc(svc)}" data-cnt="${d.count}" data-match="${d.matches}">${icon}<label for="${id}">${esc(svc)}</label><span class="svc-count">(${d.count.toLocaleString()})</span></div>`;
+      }
+      html += '</div></div>';
+    }
+    html += '</div>';
+  }
+  document.getElementById('serviceContent').innerHTML = html;
+  document.getElementById('totalCount').textContent = checkinData.length.toLocaleString();
+  updateSummary();
+}
+
+function hashId(a, b, c) {
+  const s = `${a}|${b}|${c}`;
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i), h |= 0;
+  return 'svc_' + Math.abs(h).toString(36);
+}
+
+function esc(t) {
+  const d = document.createElement('div');
+  d.textContent = t;
+  return d.innerHTML;
+}
+
+function toggleCU(el) {
+  const locs = el.parentElement.querySelectorAll('.location-group');
+  const hide = locs[0]?.style.display !== 'none';
+  locs.forEach(l => l.style.display = hide ? 'none' : 'block');
+}
+
+function toggleLoc(el) {
+  const list = el.closest('.location-group').querySelector('.service-list');
+  list.style.display = list.style.display === 'none' ? 'block' : 'none';
+}
+
+function selLoc(locId, all) {
+  const list = document.querySelector(`[data-loc="${locId}"]`);
+  if (!list) return;
+  list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.checked = all;
+    all ? selectedServices.add(cb.id) : selectedServices.delete(cb.id);
+  });
+  updateSummary();
+}
+
+function selectAllServices() {
+  document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => { cb.checked = true; selectedServices.add(cb.id); });
+  updateSummary();
+}
+
+function deselectAllServices() {
+  document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => { cb.checked = false; selectedServices.delete(cb.id); });
+  updateSummary();
+}
+
+function selectMatchingOnly() {
+  document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => {
+    const m = cb.dataset.match === 'true';
+    cb.checked = m;
+    m ? selectedServices.add(cb.id) : selectedServices.delete(cb.id);
+  });
+  updateSummary();
+}
+
+function selectNonMatchingOnly() {
+  document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => {
+    const m = cb.dataset.match === 'true';
+    cb.checked = !m;
+    !m ? selectedServices.add(cb.id) : selectedServices.delete(cb.id);
+  });
+  updateSummary();
+}
+
+function updateSel() {
+  selectedServices = new Set();
+  document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => { if (cb.checked) selectedServices.add(cb.id); });
+  updateSummary();
+}
+
+function updateSummary() {
+  let total = 0;
+  document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => { if (cb.checked) total += parseInt(cb.dataset.cnt, 10) || 0; });
+  document.getElementById('selectedCount').textContent = total.toLocaleString();
+}
+
+function getSelectedSvcNames() {
+  const set = new Set();
+  document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => { if (cb.checked) set.add(cb.dataset.svc); });
+  return set;
+}
+
+function parseDateTime(dateStr, timeStr) {
+  if (!dateStr || !timeStr) return null;
+  const t = timeStr.replace(/\s*ET\s*$/i, '').trim();
+  const dp = dateStr.split('/');
+  if (dp.length !== 3) return null;
+  const [mo, da, yr] = dp.map(Number);
+  if (isNaN(mo) || isNaN(da) || isNaN(yr)) return null;
+  const tm = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!tm) return null;
+  let h = parseInt(tm[1], 10);
+  const m = parseInt(tm[2], 10);
+  const ap = tm[3].toUpperCase();
+  if (ap === 'PM' && h !== 12) h += 12;
+  else if (ap === 'AM' && h === 12) h = 0;
+  return new Date(yr, mo - 1, da, h, m, 0, 0);
+}
+
+function processData() {
+  const selSvcs = getSelectedSvcNames();
+  const thresh = parseInt(document.getElementById('thresholdInput').value, 10) || 60;
+
+  // Step 1: filter
+  filteredData = checkinData.filter(r => selSvcs.has(r['Student Services'] || ''));
+  if (!filteredData.length) { alert('No records match selected services.'); return; }
+
+  // Step 2: parse datetimes
+  filteredData.forEach(r => { r._dt = parseDateTime(r['Check In Date'], r['Check In Time']); });
+
+  // Step 3: sort
+  filteredData.sort((a, b) => {
+    let c = (a['Location'] || '').localeCompare(b['Location'] || '');
+    if (c) return c;
+    c = (a['Student ID'] || '').localeCompare(b['Student ID'] || '');
+    if (c) return c;
+    if (!a._dt) return 1;
+    if (!b._dt) return -1;
+    return a._dt - b._dt;
+  });
+
+  // Step 4: detect duplicates
+  cleanRecords = []; originalRecords = []; duplicateRecords = []; duplicateClusters = [];
+  const groups = {};
+  for (const r of filteredData) {
+    const k = `${r['Location']}|${r['Student ID']}`;
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(r);
+  }
+
+  for (const k in groups) {
+    const g = groups[k];
+    if (g.length === 1) { g[0]._flag = ''; cleanRecords.push(g[0]); continue; }
+    let i = 0;
+    while (i < g.length) {
+      const first = g[i];
+      if (!first._dt) { first._flag = ''; cleanRecords.push(first); i++; continue; }
+      const cluster = [i];
+      let j = i + 1;
+      while (j < g.length) {
+        if (!g[j]._dt) { j++; continue; }
+        const diff = (g[j]._dt - first._dt) / 60000;
+        if (diff <= thresh) { cluster.push(j); j++; } else break;
+      }
+      if (cluster.length === 1) { g[cluster[0]]._flag = ''; cleanRecords.push(g[cluster[0]]); }
+      else {
+        g[cluster[0]]._flag = 'Original'; g[cluster[0]]._origTime = null; originalRecords.push(g[cluster[0]]);
+        const clusterDups = [];
+        for (let x = 1; x < cluster.length; x++) {
+          g[cluster[x]]._flag = 'Duplicate'; g[cluster[x]]._origTime = first._dt; 
+          duplicateRecords.push(g[cluster[x]]);
+          clusterDups.push(g[cluster[x]]);
         }
-    </script>
+        duplicateClusters.push({ original: g[cluster[0]], duplicates: clusterDups });
+      }
+      i = j;
+    }
+  }
+
+  displayResults();
+}
+
+function displayResults() {
+  document.getElementById('statFiltered').textContent = filteredData.length.toLocaleString();
+  document.getElementById('statClean').textContent = cleanRecords.length.toLocaleString();
+  document.getElementById('statOriginal').textContent = originalRecords.length.toLocaleString();
+  document.getElementById('statDuplicate').textContent = duplicateRecords.length.toLocaleString();
+  document.getElementById('statFinal').textContent = (cleanRecords.length + originalRecords.length).toLocaleString();
+  document.getElementById('resultsSection').style.display = 'block';
+
+  if (duplicateRecords.length) {
+    document.getElementById('dupSection').style.display = 'block';
+    document.getElementById('dupCount').textContent = duplicateRecords.length.toLocaleString() + ' duplicates in ' + duplicateClusters.length.toLocaleString() + ' clusters';
+    
+    // Build location summary
+    const locSummary = {};
+    for (const cluster of duplicateClusters) {
+      const loc = cluster.original['Location'] || 'Unknown';
+      if (!locSummary[loc]) locSummary[loc] = { duplicates: 0, clusters: 0 };
+      locSummary[loc].duplicates += cluster.duplicates.length;
+      locSummary[loc].clusters += 1;
+    }
+    
+    // Render location summary table (sorted by duplicate count descending)
+    const sortedLocs = Object.keys(locSummary).sort((a, b) => locSummary[b].duplicates - locSummary[a].duplicates);
+    let summaryHtml = '';
+    for (const loc of sortedLocs) {
+      summaryHtml += `<tr><td>${esc(loc)}</td><td style="text-align:right">${locSummary[loc].duplicates.toLocaleString()}</td><td style="text-align:right">${locSummary[loc].clusters.toLocaleString()}</td></tr>`;
+    }
+    document.getElementById('dupSummaryBody').innerHTML = summaryHtml;
+    
+    // Build detailed cluster table
+    let html = '';
+    for (let c = 0; c < duplicateClusters.length; c++) {
+      const cluster = duplicateClusters[c];
+      // Add spacer between clusters (except before first)
+      if (c > 0) html += '<tr class="cluster-spacer"><td colspan="7"></td></tr>';
+      // Original row (green)
+      const o = cluster.original;
+      html += `<tr class="row-original"><td><strong>ORIGINAL</strong></td><td>${esc(o['Student Name'] || '')}</td><td>${esc(o['Student ID'] || '')}</td><td>${esc(o['Location'] || '')}</td><td>${esc(o['Check In Date'] || '')}</td><td>${esc(o['Check In Time'] || '')}</td><td>${esc(o['Student Services'] || '')}</td></tr>`;
+      // Duplicate rows (red)
+      for (const d of cluster.duplicates) {
+        html += `<tr class="row-duplicate"><td>DUPLICATE</td><td>${esc(d['Student Name'] || '')}</td><td>${esc(d['Student ID'] || '')}</td><td>${esc(d['Location'] || '')}</td><td>${esc(d['Check In Date'] || '')}</td><td>${esc(d['Check In Time'] || '')}</td><td>${esc(d['Student Services'] || '')}</td></tr>`;
+      }
+    }
+    document.getElementById('dupTableBody').innerHTML = html;
+  } else {
+    document.getElementById('dupSection').style.display = 'none';
+  }
+
+  document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+function exportDuplicates() {
+  if (!duplicateRecords.length) { alert('No duplicates.'); return; }
+  const hdrs = ['Type', 'Student Name', 'Student ID', 'Location', 'Check In Date', 'Check In Time', 'Student Services'];
+  let csv = hdrs.map(h => `"${h}"`).join(',') + '\n';
+  for (const cluster of duplicateClusters) {
+    // Original row
+    const o = cluster.original;
+    csv += ['ORIGINAL', o['Student Name'], o['Student ID'], o['Location'], o['Check In Date'], o['Check In Time'], o['Student Services']].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(',') + '\n';
+    // Duplicate rows
+    for (const d of cluster.duplicates) {
+      csv += ['DUPLICATE', d['Student Name'], d['Student ID'], d['Location'], d['Check In Date'], d['Check In Time'], d['Student Services']].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(',') + '\n';
+    }
+  }
+  download(csv, `duplicates_removed_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+function exportCleanedData() {
+  const exp = [...cleanRecords, ...originalRecords];
+  exp.sort((a, b) => {
+    let c = (a['Location'] || '').localeCompare(b['Location'] || '');
+    if (c) return c;
+    c = (a['Student ID'] || '').localeCompare(b['Student ID'] || '');
+    if (c) return c;
+    if (!a._dt) return 1;
+    if (!b._dt) return -1;
+    return a._dt - b._dt;
+  });
+  if (!exp.length) { alert('No records to export.'); return; }
+  let csv = checkinHeaders.map(h => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
+  for (const r of exp) csv += checkinHeaders.map(h => `"${(r[h] || '').replace(/"/g, '""')}"`).join(',') + '\n';
+  download(csv, `checkin_cleaned_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.getElementById('successAlert').innerHTML = `✅ Exported ${exp.length.toLocaleString()} records (${duplicateRecords.length.toLocaleString()} duplicates removed)`;
+  document.getElementById('successAlert').style.display = 'block';
+}
+
+function download(csv, name) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
 </body>
 </html>
