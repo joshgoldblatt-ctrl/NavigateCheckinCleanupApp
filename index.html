@@ -1,12 +1,49 @@
 <!--
 ================================================================================
   App:          LaGuardia Navigate Check-in Cleanup App
-  Version:      4.2
+  Version:      4.6
   Released:     June 12, 2026
   Developed by: Josh Goldblatt using Claude
 ================================================================================
   CHANGELOG (most recent first)
 --------------------------------------------------------------------------------
+  v4.6  2026-06-12
+    - Reworked the per-service match percentage to reflect actual engagement
+      overlap. A check-in now counts as "corresponding to an appointment" when
+      there is an appointment for the SAME student, SAME day, and SAME location
+      — matched on the appointment's Reported Start Date (100% populated) and
+      Location, rather than the appointment's Check In timestamp (only ~37%
+      populated because many offices don't formally check students in).
+    - Rationale: a completed appointment summary — not a check-in timestamp — is
+      the reliable signal that an appointment occurred. All appointment rows
+      have reported start/end times and reported services, so all are counted.
+    - Location is used (not Care Unit) so distinct engagements within one Care
+      Unit are kept separate (e.g. Registration Lab vs. Registrar's Office). The
+      Transfer remap (Advising/Transfer Support -> Transfer/Transfer Engagement
+      Initiative) is applied consistently on the check-in side before matching.
+    - This makes the % a direct decision aid: high % = office uses check-ins to
+      record appointments (drop as duplicates); low % = check-ins are separate
+      engagements such as walk-in visits or event attendance (keep).
+  v4.5  2026-06-12
+    - Added appointment-report data-quality warning panel (collapsible): flags
+      check-in-style services that appear in the appointment report where they
+      shouldn't (e.g. "Check-in - Registration Lab" found in Reported Services).
+      Flagging is driven by an editable keyword list (default: Visit, Event,
+      Check-in, Workshop) with a re-scan button, showing each flagged service,
+      the keyword it matched, and the number of appointment rows affected.
+    - Added per-service match percentage: each check-in service now shows what
+      share of its check-in records also appear in the appointment report,
+      matched at the RECORD level on Student ID + Check In date/time (not just
+      by service name). High % (red) = mostly already counted as appointments;
+      low % (green) = genuinely check-in-only.
+    - Added overall match summary in the service selection footer: total % and
+      record count of selected check-ins already present in the appointment
+      report.
+    - BUG FIX: replaced the line-by-line CSV parser with a fully quote-aware
+      parser that correctly handles embedded newlines inside quoted fields. The
+      appointment report's free-text columns (Summary, Response 1-10, etc.)
+      contain ~4,700 embedded newlines that the old parser mis-split, corrupting
+      downstream rows. This fix ensures accurate parsing of both reports.
   v4.2  2026-06-12
     - Added summary table at the top of the duplicates section showing duplicate
       counts per location (sorted by count descending), with columns for 
@@ -61,7 +98,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LaGuardia Navigate Check-in Cleanup App v4.2</title>
+<title>LaGuardia Navigate Check-in Cleanup App v4.6</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -242,6 +279,10 @@ header{padding:38px 0 0}
 .service-item input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
 .service-item label{flex:1;cursor:pointer;color:var(--ink-soft);font-size:14px}
 .service-item .svc-count{color:var(--ink-faint);font-size:12px;min-width:60px;text-align:right}
+.service-item .svc-pct{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap;cursor:help}
+.svc-pct.pct-high{background:var(--accent-soft);color:var(--accent)}
+.svc-pct.pct-mid{background:var(--gold-soft);color:var(--gold-deep)}
+.svc-pct.pct-low{background:var(--green-soft);color:var(--green)}
 .match-yes{color:var(--green)}
 .match-no{color:var(--accent)}
 
@@ -284,7 +325,7 @@ header{padding:38px 0 0}
         <p class="subtitle">Filter check-in records by service, compare against appointment data, and remove duplicates for accurate student activity reporting.</p>
       </div>
       <div class="meta-box">
-        <b>Version:</b><span>4.2</span>
+        <b>Version:</b><span>4.6</span>
         <b>Released:</b><span>June 12, 2026</span>
         <b>Developed by:</b><span>Josh Goldblatt using Claude</span>
       </div>
@@ -314,6 +355,39 @@ header{padding:38px 0 0}
     </div>
   </div>
 
+  <!-- ===================== CONTAMINATION WARNING (Idea 1) ===================== -->
+  <div class="dept-section" id="contamSection" style="display:none">
+    <div class="dept-head danger" onclick="document.getElementById('contamSection').classList.toggle('open')">
+      <span class="chev">▶</span>
+      <h3>⚠️ Appointment Report Data-Quality Warnings</h3>
+      <span class="counts" id="contamCount">0 services</span>
+    </div>
+    <div class="dept-body">
+      <p class="muted" style="margin-bottom:14px;font-size:13px">
+        These check-in-style services were found in the <b>appointment report</b>, where they normally shouldn't appear.
+        They usually indicate a data-entry issue (a check-in label logged on an appointment). Edit the keyword list below to tune what gets flagged.
+      </p>
+      <div class="field" style="max-width:100%;margin-bottom:16px">
+        <label>Flag appointment services containing these keywords (comma-separated)</label>
+        <input type="text" id="contamKeywords" value="Visit, Event, Check-in, Workshop">
+        <div class="hint">Case-insensitive. A service is flagged if its name contains any of these words.</div>
+      </div>
+      <button class="btn btn-neutral" style="margin-bottom:16px" onclick="recomputeContamination()">Re-scan with these keywords</button>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Flagged Appointment Service</th>
+              <th>Matched Keyword</th>
+              <th style="text-align:right">Appointment Rows</th>
+            </tr>
+          </thead>
+          <tbody id="contamTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- ===================== SERVICE SELECTION ===================== -->
   <div class="service-section" id="serviceSection" style="display:none">
     <div class="service-header">
@@ -326,13 +400,15 @@ header{padding:38px 0 0}
       </div>
     </div>
     <div class="match-legend">
-      <span><span class="match-yes">✅</span> Matches appointment service</span>
-      <span><span class="match-no">❌</span> No match found</span>
+      <span><span class="match-yes">✅</span> Service name found in appointment report</span>
+      <span><span class="match-no">❌</span> Not found</span>
+      <span style="margin-left:auto">% = check-ins that correspond to an appointment (same student, day &amp; location)</span>
     </div>
     <div class="service-content" id="serviceContent"></div>
     <div class="service-summary">
       <div><strong id="selectedCount">0</strong> records selected</div>
       <div class="muted">out of <strong id="totalCount">0</strong> total</div>
+      <div style="margin-left:auto"><strong id="overallMatchPct">0%</strong> <span class="muted">of selected correspond to an appointment (<span id="overallMatchCount">0</span> records)</span></div>
     </div>
   </div>
 
@@ -422,6 +498,8 @@ let checkinHeaders = [];
 let selectedServices = new Set();
 let serviceData = {};
 let appointmentServices = new Set();
+let appointmentDayKeys = new Set(); // "studentID|MM/DD/YYYY|Location" from Reported Start Date, for engagement matching
+let contaminatedServices = []; // [{ service, keyword, count }]
 
 // Results
 let filteredData = [];
@@ -471,40 +549,51 @@ function handleFile(event, type) {
 }
 
 function parseCSV(csv) {
-  const lines = csv.split(/\r?\n/);
-  const headers = [];
-  const data = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (!lines[i]) continue;
-    const row = parseCSVLine(lines[i]);
-    if (i === 0) headers.push(...row);
-    else {
-      const obj = {};
-      for (let k = 0; k < headers.length; k++) obj[headers[k]] = row[k] || '';
-      data.push(obj);
+  // Quote-aware parser: handles embedded newlines and commas inside quoted fields.
+  const rows = [];
+  let field = '', row = [], inQuotes = false;
+  for (let i = 0; i < csv.length; i++) {
+    const c = csv[i], next = csv[i + 1];
+    if (c === '"') {
+      if (inQuotes && next === '"') { field += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (c === ',' && !inQuotes) {
+      row.push(field.trim()); field = '';
+    } else if ((c === '\n' || c === '\r') && !inQuotes) {
+      // Handle \r\n as a single break
+      if (c === '\r' && next === '\n') i++;
+      // Only push the row if we have content (skip blank lines)
+      if (field !== '' || row.length > 0) {
+        row.push(field.trim());
+        rows.push(row);
+        row = []; field = '';
+      }
+    } else {
+      field += c;
     }
+  }
+  // Final field/row
+  if (field !== '' || row.length > 0) {
+    row.push(field.trim());
+    rows.push(row);
+  }
+
+  if (!rows.length) return { headers: [], data: [] };
+  const headers = rows[0];
+  const data = [];
+  for (let r = 1; r < rows.length; r++) {
+    const obj = {};
+    for (let k = 0; k < headers.length; k++) obj[headers[k]] = rows[r][k] || '';
+    data.push(obj);
   }
   return { headers, data };
 }
 
-function parseCSVLine(line) {
-  const result = [];
-  let current = '', inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i], next = line[i + 1];
-    if (c === '"') {
-      if (inQuotes && next === '"') { current += '"'; i++; }
-      else inQuotes = !inQuotes;
-    } else if (c === ',' && !inQuotes) { result.push(current.trim()); current = ''; }
-    else current += c;
-  }
-  result.push(current.trim());
-  return result;
-}
-
 function extractAppointmentServices() {
   appointmentServices = new Set();
+  appointmentDayKeys = new Set();
   for (const row of appointmentData) {
+    // Service names from Reported Services (for the name-level ✅/❌ indicator)
     const svc = row['Reported Services'] || '';
     if (svc) {
       for (const s of splitServices(svc)) {
@@ -512,7 +601,58 @@ function extractAppointmentServices() {
         if (t) appointmentServices.add(t);
       }
     }
+    // Engagement key: Student ID + Reported Start Date + Location.
+    // All appointment rows count (they all have reported start/end + services = completed appointments).
+    const key = engagementKey(row['Student ID'], row['Reported Start Date'], row['Location']);
+    if (key) appointmentDayKeys.add(key);
   }
+  recomputeContamination();
+}
+
+// Idea 1: scan appointment services for check-in-style keywords that shouldn't be there.
+function recomputeContamination() {
+  const raw = (document.getElementById('contamKeywords')?.value || '').split(',')
+    .map(k => k.trim().toLowerCase()).filter(Boolean);
+  contaminatedServices = [];
+  if (!appointmentData || raw.length === 0) { renderContamination(); return; }
+
+  // Count appointment rows per flagged service name
+  const svcCounts = new Map(); // service -> { keyword, count }
+  for (const row of appointmentData) {
+    const svc = row['Reported Services'] || '';
+    if (!svc) continue;
+    for (const s of splitServices(svc)) {
+      const name = s.trim();
+      if (!name) continue;
+      const lower = name.toLowerCase();
+      const hit = raw.find(k => lower.includes(k));
+      if (hit) {
+        if (!svcCounts.has(name)) svcCounts.set(name, { keyword: hit, count: 0 });
+        svcCounts.get(name).count++;
+      }
+    }
+  }
+  contaminatedServices = Array.from(svcCounts.entries())
+    .map(([service, d]) => ({ service, keyword: d.keyword, count: d.count }))
+    .sort((a, b) => b.count - a.count);
+  renderContamination();
+}
+
+function renderContamination() {
+  const section = document.getElementById('contamSection');
+  if (!contaminatedServices.length) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+  const totalRows = contaminatedServices.reduce((s, c) => s + c.count, 0);
+  document.getElementById('contamCount').textContent =
+    `${contaminatedServices.length} service${contaminatedServices.length === 1 ? '' : 's'} · ${totalRows.toLocaleString()} rows`;
+  let html = '';
+  for (const c of contaminatedServices) {
+    html += `<tr><td>${esc(c.service)}</td><td><span class="badge warn">${esc(c.keyword)}</span></td><td style="text-align:right">${c.count.toLocaleString()}</td></tr>`;
+  }
+  document.getElementById('contamTableBody').innerHTML = html;
 }
 
 function splitServices(str) {
@@ -543,8 +683,12 @@ function buildServiceSelection() {
     if (!svc) continue;
     if (!serviceData[cu]) serviceData[cu] = {};
     if (!serviceData[cu][loc]) serviceData[cu][loc] = {};
-    if (!serviceData[cu][loc][svc]) serviceData[cu][loc][svc] = { count: 0, matches: matchesAppointment(svc) };
+    if (!serviceData[cu][loc][svc]) serviceData[cu][loc][svc] = { count: 0, matchedRecords: 0, matches: matchesAppointment(svc) };
     serviceData[cu][loc][svc].count++;
+    // Engagement match: does this check-in correspond to an appointment?
+    // Same student + same day + same location (using the remapped location for consistency).
+    const key = engagementKey(row['Student ID'], row['Check In Date'], loc);
+    if (key && appointmentDayKeys.has(key)) serviceData[cu][loc][svc].matchedRecords++;
   }
 
   let html = '';
@@ -563,7 +707,10 @@ function buildServiceSelection() {
         const id = hashId(cu, loc, svc);
         selectedServices.add(id);
         const icon = d.matches ? '<span class="match-yes">✅</span>' : '<span class="match-no">❌</span>';
-        html += `<div class="service-item"><input type="checkbox" id="${id}" checked onchange="updateSel()" data-cu="${esc(cu)}" data-loc="${esc(loc)}" data-svc="${esc(svc)}" data-cnt="${d.count}" data-match="${d.matches}">${icon}<label for="${id}">${esc(svc)}</label><span class="svc-count">(${d.count.toLocaleString()})</span></div>`;
+        const pct = d.count > 0 ? Math.round((d.matchedRecords / d.count) * 100) : 0;
+        const pctClass = pct >= 75 ? 'pct-high' : (pct >= 25 ? 'pct-mid' : 'pct-low');
+        const pctLabel = `<span class="svc-pct ${pctClass}" title="${d.matchedRecords.toLocaleString()} of ${d.count.toLocaleString()} check-ins correspond to an appointment (same student, same day, same location) — i.e. already represented in the appointment report">${pct}% in appts</span>`;
+        html += `<div class="service-item"><input type="checkbox" id="${id}" checked onchange="updateSel()" data-cu="${esc(cu)}" data-loc="${esc(loc)}" data-svc="${esc(svc)}" data-cnt="${d.count}" data-matched="${d.matchedRecords}" data-match="${d.matches}">${icon}<label for="${id}">${esc(svc)}</label>${pctLabel}<span class="svc-count">(${d.count.toLocaleString()})</span></div>`;
       }
       html += '</div></div>';
     }
@@ -643,9 +790,17 @@ function updateSel() {
 }
 
 function updateSummary() {
-  let total = 0;
-  document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => { if (cb.checked) total += parseInt(cb.dataset.cnt, 10) || 0; });
+  let total = 0, matched = 0;
+  document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => {
+    if (cb.checked) {
+      total += parseInt(cb.dataset.cnt, 10) || 0;
+      matched += parseInt(cb.dataset.matched, 10) || 0;
+    }
+  });
   document.getElementById('selectedCount').textContent = total.toLocaleString();
+  const pct = total > 0 ? Math.round((matched / total) * 100) : 0;
+  document.getElementById('overallMatchPct').textContent = pct + '%';
+  document.getElementById('overallMatchCount').textContent = matched.toLocaleString();
 }
 
 function getSelectedSvcNames() {
@@ -669,6 +824,23 @@ function parseDateTime(dateStr, timeStr) {
   if (ap === 'PM' && h !== 12) h += 12;
   else if (ap === 'AM' && h === 12) h = 0;
   return new Date(yr, mo - 1, da, h, m, 0, 0);
+}
+
+// Normalize a date string (M/D/YYYY or MM/DD/YYYY) to canonical MM/DD/YYYY. Returns '' if invalid.
+function normalizedDate(dateStr) {
+  const dp = String(dateStr || '').trim().split('/');
+  if (dp.length !== 3) return '';
+  const mo = parseInt(dp[0], 10), da = parseInt(dp[1], 10), yr = parseInt(dp[2], 10);
+  if (isNaN(mo) || isNaN(da) || isNaN(yr)) return '';
+  return `${String(mo).padStart(2, '0')}/${String(da).padStart(2, '0')}/${yr}`;
+}
+
+// Engagement key: same student, same day, same location.
+// Check-in side uses Check In Date; appointment side uses Reported Start Date.
+function engagementKey(studentId, dateStr, location) {
+  const d = normalizedDate(dateStr);
+  if (!studentId || !d || !location) return null;
+  return `${String(studentId).trim()}|${d}|${String(location).trim()}`;
 }
 
 function processData() {
