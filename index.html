@@ -1,96 +1,73 @@
 <!--
 ================================================================================
-  App:          LaGuardia Navigate Check-in Cleanup App
-  Version:      4.6
-  Released:     June 12, 2026
+  App:          Navigate Check-in Cleanup App for CUNY
+  Version:      1.2
+  Released:     October 8, 2026
   Developed by: Josh Goldblatt using Claude
 ================================================================================
   CHANGELOG (most recent first)
 --------------------------------------------------------------------------------
-  v4.6  2026-06-12
-    - Reworked the per-service match percentage to reflect actual engagement
-      overlap. A check-in now counts as "corresponding to an appointment" when
-      there is an appointment for the SAME student, SAME day, and SAME location
-      — matched on the appointment's Reported Start Date (100% populated) and
-      Location, rather than the appointment's Check In timestamp (only ~37%
-      populated because many offices don't formally check students in).
-    - Rationale: a completed appointment summary — not a check-in timestamp — is
-      the reliable signal that an appointment occurred. All appointment rows
-      have reported start/end times and reported services, so all are counted.
-    - Location is used (not Care Unit) so distinct engagements within one Care
-      Unit are kept separate (e.g. Registration Lab vs. Registrar's Office). The
-      Transfer remap (Advising/Transfer Support -> Transfer/Transfer Engagement
-      Initiative) is applied consistently on the check-in side before matching.
-    - This makes the % a direct decision aid: high % = office uses check-ins to
-      record appointments (drop as duplicates); low % = check-ins are separate
-      engagements such as walk-in visits or event attendance (keep).
-  v4.5  2026-06-12
-    - Added appointment-report data-quality warning panel (collapsible): flags
-      check-in-style services that appear in the appointment report where they
-      shouldn't (e.g. "Check-in - Registration Lab" found in Reported Services).
-      Flagging is driven by an editable keyword list (default: Visit, Event,
-      Check-in, Workshop) with a re-scan button, showing each flagged service,
-      the keyword it matched, and the number of appointment rows affected.
-    - Added per-service match percentage: each check-in service now shows what
-      share of its check-in records also appear in the appointment report,
-      matched at the RECORD level on Student ID + Check In date/time (not just
-      by service name). High % (red) = mostly already counted as appointments;
-      low % (green) = genuinely check-in-only.
-    - Added overall match summary in the service selection footer: total % and
-      record count of selected check-ins already present in the appointment
-      report.
-    - BUG FIX: replaced the line-by-line CSV parser with a fully quote-aware
-      parser that correctly handles embedded newlines inside quoted fields. The
-      appointment report's free-text columns (Summary, Response 1-10, etc.)
-      contain ~4,700 embedded newlines that the old parser mis-split, corrupting
-      downstream rows. This fix ensures accurate parsing of both reports.
-  v4.2  2026-06-12
-    - Added summary table at the top of the duplicates section showing duplicate
-      counts per location (sorted by count descending), with columns for 
-      Location, Duplicates, and Clusters.
-  v4.1  2026-06-12
-    - Improved duplicates display: now shows clusters with the original record
-      (highlighted green) followed by its duplicate(s) (highlighted red).
-    - Removed "Original Time" column since the original record is now visible.
-    - Added "Type" column showing ORIGINAL or DUPLICATE labels.
-    - Duplicates count now shows "X duplicates in Y clusters" for clarity.
-    - Export Duplicates CSV now includes both original and duplicate records
-      with Type column for easy filtering.
-  v4.0  2026-06-12
-    - Added deduplication functionality: detects duplicate check-ins from the 
-      same student at the same location within a configurable time threshold
-      (default 60 minutes). Duplicates are automatically removed from export.
-    - Added collapsible "Duplicates to Remove" section showing all duplicate
-      records with details including the original check-in time they matched.
-    - Added "Export Duplicates CSV" button for auditing removed records.
-    - Added threshold input field (default 60 min, adjustable 1-1440 min).
-    - Results section now shows: After Service Filter, Clean Records, 
-      Original (Keep), Duplicates (Remove), and Final Export Count.
-    - Workflow changed to two-step: select services first, then click 
-      "Process & Find Duplicates" to run deduplication.
-    - Migrated to standard LaGuardia design system (Fraunces/Source Sans 3,
-      warm paper palette, accent colors, standardized components).
-  v3.0  2026-01-28
-    - Added appointment report upload to compare check-in services against
-      appointment services for exact matching.
-    - Added match indicators: ✅ for services that match an appointment 
-      service, ❌ for services with no matching appointment service.
-    - Added "Select Matching Only" and "Select Non-Matching Only" buttons.
-    - Service matching uses exact match logic (case-insensitive) and respects
-      commas inside parentheses (e.g., "Award Status (Pell, TAP, Scholarships)"
-      is treated as a single service name).
-  v2.0  2026-01-28
-    - Added data transformation rule: records with Care Unit "Advising" and 
-      Location "Transfer Support" are re-mapped to Care Unit "Transfer" and 
-      Location "Transfer Engagement Initiative" for display purposes.
-  v1.0  2026-01-28
-    - Initial release
-    - Upload check-in report CSV and filter by service selection
-    - Service selection UI grouped by Care Unit → Location
-    - All/None buttons per location for quick selection
-    - Global Select All / Deselect All buttons
-    - Record counts shown per service
-    - Export filtered CSV with original column structure preserved
+  v1.2  2026-10-08
+    - The app now accepts either Navigate appointment export as the
+      "Appointment Report":
+        * Appointment Summaries report — columns "Reported Services" and
+          "Reported Start Date" (completed appointments only).
+        * General Appointments report — columns "Scheduled Services" and
+          "Scheduled Start Date" (all scheduled appointments, including
+          cancellations and no-shows; ~35% of rows carry a check-in timestamp).
+      Column resolution tries the "Reported" name first and falls back to the
+      "Scheduled" name. The info alert names which report type was detected.
+    - No rows are excluded from either report (Cancelled? / no-show flags are
+      not applied). With the general report, Same-Day matches can therefore
+      include appointments the student did not attend; the Exact column is
+      unaffected because it requires the appointment's own check-in timestamp.
+    - The missing-column warning now lists the accepted alternatives.
+  v1.1  2026-10-08
+    - Duplicate detection (Step 2) is now optional. A "Remove duplicates"
+      checkbox (checked by default) controls it; unchecking greys out the time
+      threshold. With it off, processData() skips the dedup pass entirely:
+      every filtered record is exported, the Duplicates section stays hidden,
+      and the Clean / Original / Duplicates stat cards are hidden so only
+      After Filter and Final Count show (they are equal in that mode).
+    - Export filename is checkin_filtered_<date>.csv when dedup is off (vs.
+      checkin_cleaned_<date>.csv when on), and the success message omits the
+      duplicates-removed count in that mode.
+  v1.0  2026-10-08
+    - Initial release. Derived from the LaGuardia Navigate Check-in Cleanup App
+      v4.6 and made campus-agnostic for use at other CUNY colleges.
+    - Removed from the LaGuardia version:
+        * The appointment-report data-quality warning panel (keyword scan for
+          check-in-style services such as Visit / Event / Workshop). Service
+          naming conventions differ by campus, so the scan does not transfer.
+        * The LaGuardia-specific Transfer remap (Advising / Transfer Support ->
+          Transfer / Transfer Engagement Initiative).
+        * The name-level ✅/❌ service indicator and the "Matching Only" /
+          "Non-Matching Only" buttons. Record-level match counts replace them.
+    - Matching is now shown as two fixed columns per check-in service, both
+      always computed (no toggles):
+        * Exact Matches: Student ID + Location + Service + Check In Date +
+          Check In Time, compared against the appointment report's own
+          Check In Date / Check In Time (same minute). Service matches when the
+          check-in's Student Services value appears among the appointment's
+          Reported Services (case-insensitive, commas inside parentheses are
+          honored). No fallback to Reported Start Time: if a campus does not
+          populate appointment check-in timestamps, this column stays low.
+        * Same-Day Matches: Student ID + Location + Date, compared against the
+          appointment's Reported Start Date (the LaGuardia v4.6 logic).
+      Each column shows the record count and the percentage of that service's
+      check-in records.
+    - Service selection is now a table inside each Care Unit > Location group:
+      Service | Check-in Records | Exact Matches | Same-Day Matches, with a
+      checkbox per service and All / None per location. The footer shows the
+      selected record total plus exact and same-day totals with percentages.
+    - Appointment-report column lookup is tolerant of header variations (e.g.
+      "Check In Date" vs "Checkin Date"); a notice is shown if a required
+      column cannot be found.
+    - Carried over unchanged: quote-aware CSV parser (handles embedded newlines
+      in quoted fields), duplicate detection with adjustable time threshold
+      (default 60 minutes; earliest check-in kept), duplicate summary by
+      location, cluster detail table, Export Duplicates CSV, and Export Cleaned
+      Check-ins with the original column structure preserved.
 ================================================================================
 -->
 <!DOCTYPE html>
@@ -98,7 +75,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LaGuardia Navigate Check-in Cleanup App v4.6</title>
+<title>Navigate Check-in Cleanup App for CUNY v1.2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -199,6 +176,7 @@ header{padding:38px 0 0}
 .tbl tbody td{padding:10px 14px;border-bottom:1px solid var(--line);color:var(--ink-soft)}
 .tbl tbody tr:last-child td{border-bottom:none}
 .tbl tbody tr:hover{background:var(--paper)}
+.tbl td.num,.tbl th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* Duplicate cluster highlighting */
 .tbl tbody tr.row-original td{background:var(--green-soft);color:var(--green)}
@@ -254,10 +232,10 @@ header{padding:38px 0 0}
 .service-header .actions button{padding:6px 14px;font-size:12px;border:1px solid rgba(255,255,255,.5);
   background:transparent;color:#fff;border-radius:999px;cursor:pointer;font-weight:600;transition:.15s}
 .service-header .actions button:hover{background:#fff;color:var(--ink)}
-.match-legend{display:flex;gap:18px;padding:12px 20px;background:var(--gold-soft);border-bottom:1px solid var(--line);font-size:13px;color:var(--ink-soft)}
-.match-legend span{display:flex;align-items:center;gap:6px}
-.service-content{max-height:450px;overflow-y:auto;padding:16px 20px;background:var(--paper)}
-.service-summary{background:var(--green-soft);padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;font-size:14px;border-top:1px solid var(--line)}
+.match-legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px 24px;padding:12px 20px;background:var(--gold-soft);border-bottom:1px solid var(--line);font-size:13px;color:var(--ink-soft)}
+.match-legend b{color:var(--ink)}
+.service-content{max-height:520px;overflow-y:auto;padding:16px 20px;background:var(--paper)}
+.service-summary{background:var(--green-soft);padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px 28px;font-size:14px;border-top:1px solid var(--line)}
 .service-summary strong{color:var(--green);font-size:18px}
 
 /* Care unit / location groups */
@@ -269,22 +247,25 @@ header{padding:38px 0 0}
 .location-group:last-child{border-bottom:none}
 .location-head{padding:10px 16px 10px 28px;display:flex;justify-content:space-between;align-items:center;background:var(--card)}
 .location-head:hover{background:var(--paper)}
-.location-head span{font-weight:500;color:var(--ink-soft)}
+.location-head span{font-weight:500;color:var(--ink-soft);cursor:pointer}
 .location-actions{display:flex;align-items:center;gap:8px}
 .location-actions button{padding:3px 10px;font-size:11px;border:1px solid var(--line);background:var(--card);color:var(--ink-soft);border-radius:4px;cursor:pointer;transition:.15s}
 .location-actions button:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
 .location-count{font-size:12px;color:var(--ink-faint);min-width:80px;text-align:right}
-.service-list{padding:8px 16px 12px 44px;background:var(--card)}
-.service-item{display:flex;align-items:center;padding:5px 0;gap:10px}
-.service-item input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
-.service-item label{flex:1;cursor:pointer;color:var(--ink-soft);font-size:14px}
-.service-item .svc-count{color:var(--ink-faint);font-size:12px;min-width:60px;text-align:right}
-.service-item .svc-pct{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap;cursor:help}
-.svc-pct.pct-high{background:var(--accent-soft);color:var(--accent)}
-.svc-pct.pct-mid{background:var(--gold-soft);color:var(--gold-deep)}
-.svc-pct.pct-low{background:var(--green-soft);color:var(--green)}
-.match-yes{color:var(--green)}
-.match-no{color:var(--accent)}
+.service-list{padding:8px 16px 14px 28px;background:var(--card)}
+.svc-table{width:100%;border-collapse:collapse;font-size:13.5px}
+.svc-table thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:700;padding:6px 10px;border-bottom:1.5px solid var(--line);white-space:nowrap}
+.svc-table tbody td{padding:6px 10px;border-bottom:1px solid var(--line);color:var(--ink-soft)}
+.svc-table tbody tr:last-child td{border-bottom:none}
+.svc-table tbody tr:hover{background:var(--paper)}
+.svc-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.svc-table td.chk{width:28px;padding-right:0}
+.svc-table input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:var(--accent);vertical-align:middle}
+.svc-table label{cursor:pointer;color:var(--ink);font-size:14px}
+.pct{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin-left:8px;min-width:44px;text-align:center}
+.pct.pct-high{background:var(--accent-soft);color:var(--accent)}
+.pct.pct-mid{background:var(--gold-soft);color:var(--gold-deep)}
+.pct.pct-low{background:var(--green-soft);color:var(--green)}
 
 /* ---------- Settings panel ---------- */
 .settings-panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 24px;margin-bottom:26px}
@@ -293,6 +274,11 @@ header{padding:38px 0 0}
 .threshold-row input{width:80px;padding:8px 10px;font-size:14px;border:1.5px solid var(--line);border-radius:8px;text-align:center}
 .threshold-row input:focus{outline:none;border-color:var(--accent)}
 .threshold-row span{color:var(--ink-soft)}
+.threshold-row.off{opacity:.45}
+.threshold-row.off input{background:var(--paper);cursor:not-allowed}
+.toggle-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:14px;color:var(--ink)}
+.toggle-row input[type="checkbox"]{width:17px;height:17px;cursor:pointer;accent-color:var(--accent)}
+.toggle-row label{cursor:pointer;font-weight:600}
 
 /* ---------- Button row ---------- */
 .btn-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:30px 0}
@@ -301,6 +287,7 @@ header{padding:38px 0 0}
 .alert{padding:14px 18px;border-radius:var(--radius);margin-bottom:20px;font-size:14px;display:none}
 .alert.info{background:var(--teal-soft);color:var(--teal);border:1px solid var(--teal)}
 .alert.success{background:var(--green-soft);color:var(--green);border:1px solid var(--green)}
+.alert.warn{background:var(--gold-soft);color:var(--gold-deep);border:1px solid var(--gold)}
 
 /* ---------- Section labels ---------- */
 .sec-label{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink-faint);
@@ -325,8 +312,8 @@ header{padding:38px 0 0}
         <p class="subtitle">Filter check-in records by service, compare against appointment data, and remove duplicates for accurate student activity reporting.</p>
       </div>
       <div class="meta-box">
-        <b>Version:</b><span>4.6</span>
-        <b>Released:</b><span>June 12, 2026</span>
+        <b>Version:</b><span>1.2</span>
+        <b>Released:</b><span>October 8, 2026</span>
         <b>Developed by:</b><span>Josh Goldblatt using Claude</span>
       </div>
     </div>
@@ -334,6 +321,7 @@ header{padding:38px 0 0}
 
   <!-- ===================== ALERTS ===================== -->
   <div class="alert info" id="infoAlert"></div>
+  <div class="alert warn" id="warnAlert"></div>
   <div class="alert success" id="successAlert"></div>
 
   <!-- ===================== FILE UPLOAD ===================== -->
@@ -355,39 +343,6 @@ header{padding:38px 0 0}
     </div>
   </div>
 
-  <!-- ===================== CONTAMINATION WARNING (Idea 1) ===================== -->
-  <div class="dept-section" id="contamSection" style="display:none">
-    <div class="dept-head danger" onclick="document.getElementById('contamSection').classList.toggle('open')">
-      <span class="chev">▶</span>
-      <h3>⚠️ Appointment Report Data-Quality Warnings</h3>
-      <span class="counts" id="contamCount">0 services</span>
-    </div>
-    <div class="dept-body">
-      <p class="muted" style="margin-bottom:14px;font-size:13px">
-        These check-in-style services were found in the <b>appointment report</b>, where they normally shouldn't appear.
-        They usually indicate a data-entry issue (a check-in label logged on an appointment). Edit the keyword list below to tune what gets flagged.
-      </p>
-      <div class="field" style="max-width:100%;margin-bottom:16px">
-        <label>Flag appointment services containing these keywords (comma-separated)</label>
-        <input type="text" id="contamKeywords" value="Visit, Event, Check-in, Workshop">
-        <div class="hint">Case-insensitive. A service is flagged if its name contains any of these words.</div>
-      </div>
-      <button class="btn btn-neutral" style="margin-bottom:16px" onclick="recomputeContamination()">Re-scan with these keywords</button>
-      <div class="table-wrap">
-        <table class="tbl">
-          <thead>
-            <tr>
-              <th>Flagged Appointment Service</th>
-              <th>Matched Keyword</th>
-              <th style="text-align:right">Appointment Rows</th>
-            </tr>
-          </thead>
-          <tbody id="contamTableBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
   <!-- ===================== SERVICE SELECTION ===================== -->
   <div class="service-section" id="serviceSection" style="display:none">
     <div class="service-header">
@@ -395,27 +350,29 @@ header{padding:38px 0 0}
       <div class="actions">
         <button onclick="selectAllServices()">Select All</button>
         <button onclick="deselectAllServices()">Deselect All</button>
-        <button onclick="selectMatchingOnly()">Matching Only</button>
-        <button onclick="selectNonMatchingOnly()">Non-Matching Only</button>
       </div>
     </div>
     <div class="match-legend">
-      <span><span class="match-yes">✅</span> Service name found in appointment report</span>
-      <span><span class="match-no">❌</span> Not found</span>
-      <span style="margin-left:auto">% = check-ins that correspond to an appointment (same student, day &amp; location)</span>
+      <div><b>Exact Matches</b> — check-ins with an appointment for the same Student ID, Location, Service, Check In Date and Check In Time (same minute), using the appointment report's own check-in timestamp.</div>
+      <div><b>Same-Day Matches</b> — check-ins with an appointment for the same Student ID, Location and Date, using the appointment's Reported Start Date (or Scheduled Start Date in the general appointments report).</div>
     </div>
     <div class="service-content" id="serviceContent"></div>
     <div class="service-summary">
-      <div><strong id="selectedCount">0</strong> records selected</div>
-      <div class="muted">out of <strong id="totalCount">0</strong> total</div>
-      <div style="margin-left:auto"><strong id="overallMatchPct">0%</strong> <span class="muted">of selected correspond to an appointment (<span id="overallMatchCount">0</span> records)</span></div>
+      <div><strong id="selectedCount">0</strong> records selected <span class="muted">of <span id="totalCount">0</span></span></div>
+      <div><strong id="exactTotal">0</strong> <span class="muted">exact matches (<span id="exactPct">0%</span> of selected)</span></div>
+      <div><strong id="dayTotal">0</strong> <span class="muted">same-day matches (<span id="dayPct">0%</span> of selected)</span></div>
     </div>
   </div>
 
   <!-- ===================== DEDUP SETTINGS ===================== -->
   <div class="settings-panel" id="settingsPanel" style="display:none">
     <h3>⏱️ Step 2: Duplicate Detection</h3>
-    <div class="threshold-row">
+    <div class="toggle-row">
+      <input type="checkbox" id="dedupToggle" checked onchange="updateDedupToggle()">
+      <label for="dedupToggle">Remove duplicates</label>
+      <span class="muted" style="font-size:13px">Uncheck to export all filtered check-ins without duplicate detection.</span>
+    </div>
+    <div class="threshold-row" id="thresholdRow">
       <span>Time threshold:</span>
       <input type="number" id="thresholdInput" value="60" min="1" max="1440">
       <span>minutes</span>
@@ -424,7 +381,7 @@ header{padding:38px 0 0}
   </div>
 
   <div class="btn-row" id="processRow" style="display:none">
-    <button class="btn btn-primary" onclick="processData()">Process &amp; Find Duplicates</button>
+    <button class="btn btn-primary" id="processBtn" onclick="processData()">Process &amp; Find Duplicates</button>
   </div>
 
   <!-- ===================== RESULTS ===================== -->
@@ -432,9 +389,9 @@ header{padding:38px 0 0}
     <div class="sec-label">Results</div>
     <div class="stat-grid">
       <div class="stat"><div class="num" id="statFiltered">0</div><div class="lbl">After Filter</div></div>
-      <div class="stat green"><div class="num" id="statClean">0</div><div class="lbl">Clean</div></div>
-      <div class="stat gold"><div class="num" id="statOriginal">0</div><div class="lbl">Original (Keep)</div></div>
-      <div class="stat" style="--accent:var(--accent)"><div class="num" id="statDuplicate">0</div><div class="lbl">Duplicates</div></div>
+      <div class="stat green dedup-only"><div class="num" id="statClean">0</div><div class="lbl">Clean</div></div>
+      <div class="stat gold dedup-only"><div class="num" id="statOriginal">0</div><div class="lbl">Original (Keep)</div></div>
+      <div class="stat dedup-only"><div class="num" id="statDuplicate">0</div><div class="lbl">Duplicates</div></div>
       <div class="stat teal"><div class="num" id="statFinal">0</div><div class="lbl">Final Count</div></div>
     </div>
 
@@ -448,21 +405,21 @@ header{padding:38px 0 0}
       </div>
       <div class="dept-body">
         <p class="muted" style="margin-bottom:14px;font-size:13px">These records are duplicates and will be excluded from the export.</p>
-        
+
         <!-- Summary by Location -->
         <div class="table-wrap" style="margin-bottom:20px">
           <table class="tbl">
             <thead>
               <tr>
                 <th>Location</th>
-                <th style="text-align:right">Duplicates</th>
-                <th style="text-align:right">Clusters</th>
+                <th class="num">Duplicates</th>
+                <th class="num">Clusters</th>
               </tr>
             </thead>
             <tbody id="dupSummaryBody"></tbody>
           </table>
         </div>
-        
+
         <h4 style="margin-bottom:12px">Duplicate Details</h4>
         <div class="table-wrap">
           <table class="tbl">
@@ -491,15 +448,21 @@ header{padding:38px 0 0}
 </div>
 
 <script>
-// Global state
+// ============================================================================
+// GLOBAL STATE
+// ============================================================================
 let appointmentData = null;
+let appointmentHeaders = [];
+let apptCols = {};            // resolved appointment column names (see resolveAppointmentColumns)
+let apptReportType = '';      // "Appointment Summaries report" or "General Appointments report"
 let checkinData = null;
 let checkinHeaders = [];
 let selectedServices = new Set();
 let serviceData = {};
-let appointmentServices = new Set();
-let appointmentDayKeys = new Set(); // "studentID|MM/DD/YYYY|Location" from Reported Start Date, for engagement matching
-let contaminatedServices = []; // [{ service, keyword, count }]
+
+// Match lookups built from the appointment report
+let apptDayKeys = new Set();   // "StudentID|MM/DD/YYYY|Location"                       (Reported Start Date)
+let apptExactKeys = new Set(); // "StudentID|Location|service|MM/DD/YYYY|HH:MM"         (appointment Check In Date/Time)
 
 // Results
 let filteredData = [];
@@ -507,8 +470,11 @@ let cleanRecords = [];
 let originalRecords = [];
 let duplicateRecords = [];
 let duplicateClusters = []; // Array of { original: record, duplicates: [records] }
+let dedupEnabled = true;    // mirrors the Step 2 "Remove duplicates" checkbox at the time of the last Process
 
-// File handlers
+// ============================================================================
+// FILE HANDLING
+// ============================================================================
 document.getElementById('appointmentFile').addEventListener('change', e => handleFile(e, 'appointment'));
 document.getElementById('checkinFile').addEventListener('change', e => handleFile(e, 'checkin'));
 
@@ -525,18 +491,21 @@ function handleFile(event, type) {
     setTimeout(() => {
       const result = parseCSV(e.target.result);
       if (type === 'appointment') {
+        appointmentHeaders = result.headers;
         appointmentData = result.data;
-        extractAppointmentServices();
+        resolveAppointmentColumns();
+        buildAppointmentLookups();
         document.getElementById('appointmentBox').classList.add('loaded');
-        infoEl.innerHTML = `✅ <b>${file.name}</b><br>${size} MB · ${appointmentData.length.toLocaleString()} records`;
+        infoEl.innerHTML = `✅ <b>${esc(file.name)}</b><br>${size} MB · ${appointmentData.length.toLocaleString()} records<br><span class="muted">Detected: ${esc(apptReportType)}</span>`;
       } else {
         checkinHeaders = result.headers;
         checkinData = result.data;
         document.getElementById('checkinBox').classList.add('loaded');
-        infoEl.innerHTML = `✅ <b>${file.name}</b><br>${size} MB · ${checkinData.length.toLocaleString()} records`;
+        infoEl.innerHTML = `✅ <b>${esc(file.name)}</b><br>${size} MB · ${checkinData.length.toLocaleString()} records`;
       }
       if (appointmentData && checkinData) {
-        document.getElementById('infoAlert').innerHTML = `Both files loaded. Comparing against ${appointmentServices.size.toLocaleString()} unique appointment services.`;
+        document.getElementById('infoAlert').innerHTML =
+          `Both files loaded. ${appointmentData.length.toLocaleString()} appointment records available for matching (${esc(apptReportType)}).`;
         document.getElementById('infoAlert').style.display = 'block';
         buildServiceSelection();
         document.getElementById('serviceSection').style.display = 'block';
@@ -560,9 +529,7 @@ function parseCSV(csv) {
     } else if (c === ',' && !inQuotes) {
       row.push(field.trim()); field = '';
     } else if ((c === '\n' || c === '\r') && !inQuotes) {
-      // Handle \r\n as a single break
       if (c === '\r' && next === '\n') i++;
-      // Only push the row if we have content (skip blank lines)
       if (field !== '' || row.length > 0) {
         row.push(field.trim());
         rows.push(row);
@@ -572,14 +539,14 @@ function parseCSV(csv) {
       field += c;
     }
   }
-  // Final field/row
   if (field !== '' || row.length > 0) {
     row.push(field.trim());
     rows.push(row);
   }
 
   if (!rows.length) return { headers: [], data: [] };
-  const headers = rows[0];
+  // Strip a UTF-8 BOM from the first header if present
+  const headers = rows[0].map((h, i) => i === 0 ? h.replace(/^\uFEFF/, '') : h);
   const data = [];
   for (let r = 1; r < rows.length; r++) {
     const obj = {};
@@ -589,73 +556,82 @@ function parseCSV(csv) {
   return { headers, data };
 }
 
-function extractAppointmentServices() {
-  appointmentServices = new Set();
-  appointmentDayKeys = new Set();
-  for (const row of appointmentData) {
-    // Service names from Reported Services (for the name-level ✅/❌ indicator)
-    const svc = row['Reported Services'] || '';
-    if (svc) {
-      for (const s of splitServices(svc)) {
-        const t = s.trim().toLowerCase();
-        if (t) appointmentServices.add(t);
-      }
-    }
-    // Engagement key: Student ID + Reported Start Date + Location.
-    // All appointment rows count (they all have reported start/end + services = completed appointments).
-    const key = engagementKey(row['Student ID'], row['Reported Start Date'], row['Location']);
-    if (key) appointmentDayKeys.add(key);
+// ============================================================================
+// APPOINTMENT REPORT: COLUMN RESOLUTION + MATCH LOOKUPS
+// ============================================================================
+
+// Find the first header matching a pattern. Tolerates small naming differences
+// between campuses / report versions (e.g. "Check In Date" vs "Checkin Date").
+function findHeader(headers, patterns) {
+  for (const p of patterns) {
+    const hit = headers.find(h => p.test(h.trim()));
+    if (hit) return hit;
   }
-  recomputeContamination();
+  return null;
 }
 
-// Idea 1: scan appointment services for check-in-style keywords that shouldn't be there.
-function recomputeContamination() {
-  const raw = (document.getElementById('contamKeywords')?.value || '').split(',')
-    .map(k => k.trim().toLowerCase()).filter(Boolean);
-  contaminatedServices = [];
-  if (!appointmentData || raw.length === 0) { renderContamination(); return; }
+function resolveAppointmentColumns() {
+  const H = appointmentHeaders;
+  // Two Navigate exports are accepted:
+  //   Appointment Summaries report -> "Reported Services" / "Reported Start Date" (completed appointments)
+  //   General Appointments report  -> "Scheduled Services" / "Scheduled Start Date" (all scheduled appointments)
+  // "Reported" is tried first; "Scheduled" is the fallback.
+  apptCols = {
+    studentId:   findHeader(H, [/^student id$/i, /student\s*id/i]),
+    location:    findHeader(H, [/^location$/i]),
+    services:    findHeader(H, [/^reported services$/i, /reported\s*services/i, /^scheduled services$/i, /scheduled\s*services/i]),
+    startDate:   findHeader(H, [/^reported start date$/i, /reported\s*start\s*date/i, /^scheduled start date$/i, /scheduled\s*start\s*date/i]),
+    checkInDate: findHeader(H, [/^check[\s-]?in date$/i, /check[\s-]?in.*date/i]),
+    checkInTime: findHeader(H, [/^check[\s-]?in time$/i, /check[\s-]?in.*time/i])
+  };
+  apptReportType = /reported/i.test(apptCols.services || '') || /reported/i.test(apptCols.startDate || '')
+    ? 'Appointment Summaries report'
+    : (apptCols.services || apptCols.startDate ? 'General Appointments report' : 'Unknown report type');
+  const missing = [];
+  if (!apptCols.studentId) missing.push('Student ID');
+  if (!apptCols.location) missing.push('Location');
+  if (!apptCols.services) missing.push('Reported Services (or Scheduled Services)');
+  if (!apptCols.startDate) missing.push('Reported Start Date (or Scheduled Start Date)');
+  if (!apptCols.checkInDate) missing.push('Check In Date');
+  if (!apptCols.checkInTime) missing.push('Check In Time');
+  const warn = document.getElementById('warnAlert');
+  if (missing.length) {
+    warn.innerHTML = `⚠️ The appointment report is missing expected column(s): <b>${esc(missing.join(', '))}</b>. Matching that depends on these columns will show zero.`;
+    warn.style.display = 'block';
+  } else {
+    warn.style.display = 'none';
+  }
+}
 
-  // Count appointment rows per flagged service name
-  const svcCounts = new Map(); // service -> { keyword, count }
+function buildAppointmentLookups() {
+  apptDayKeys = new Set();
+  apptExactKeys = new Set();
   for (const row of appointmentData) {
-    const svc = row['Reported Services'] || '';
-    if (!svc) continue;
-    for (const s of splitServices(svc)) {
-      const name = s.trim();
-      if (!name) continue;
-      const lower = name.toLowerCase();
-      const hit = raw.find(k => lower.includes(k));
-      if (hit) {
-        if (!svcCounts.has(name)) svcCounts.set(name, { keyword: hit, count: 0 });
-        svcCounts.get(name).count++;
+    const sid = apptCols.studentId ? row[apptCols.studentId] : '';
+    const loc = apptCols.location ? row[apptCols.location] : '';
+
+    // Same-day key: Student ID + Reported Start Date + Location.
+    // All appointment rows count (reported start/end + services = completed appointment).
+    const dayKey = dayMatchKey(sid, apptCols.startDate ? row[apptCols.startDate] : '', loc);
+    if (dayKey) apptDayKeys.add(dayKey);
+
+    // Exact key: Student ID + Location + Service + appointment Check In Date + Check In Time.
+    // Only rows with a populated appointment check-in timestamp can produce an exact key.
+    const ciDate = normalizedDate(apptCols.checkInDate ? row[apptCols.checkInDate] : '');
+    const ciTime = normalizedTime(apptCols.checkInTime ? row[apptCols.checkInTime] : '');
+    const svcRaw = apptCols.services ? (row[apptCols.services] || '') : '';
+    if (sid && loc && ciDate && ciTime && svcRaw) {
+      for (const s of splitServices(svcRaw)) {
+        const key = exactMatchKey(sid, loc, s, ciDate, ciTime);
+        if (key) apptExactKeys.add(key);
       }
     }
   }
-  contaminatedServices = Array.from(svcCounts.entries())
-    .map(([service, d]) => ({ service, keyword: d.keyword, count: d.count }))
-    .sort((a, b) => b.count - a.count);
-  renderContamination();
-}
-
-function renderContamination() {
-  const section = document.getElementById('contamSection');
-  if (!contaminatedServices.length) {
-    section.style.display = 'none';
-    return;
-  }
-  section.style.display = 'block';
-  const totalRows = contaminatedServices.reduce((s, c) => s + c.count, 0);
-  document.getElementById('contamCount').textContent =
-    `${contaminatedServices.length} service${contaminatedServices.length === 1 ? '' : 's'} · ${totalRows.toLocaleString()} rows`;
-  let html = '';
-  for (const c of contaminatedServices) {
-    html += `<tr><td>${esc(c.service)}</td><td><span class="badge warn">${esc(c.keyword)}</span></td><td style="text-align:right">${c.count.toLocaleString()}</td></tr>`;
-  }
-  document.getElementById('contamTableBody').innerHTML = html;
 }
 
 function splitServices(str) {
+  // Split on commas, but not commas inside parentheses
+  // e.g. "Award Status (Pell, TAP, Scholarships)" stays one service.
   const result = [];
   let current = '', depth = 0;
   for (const c of str) {
@@ -668,27 +644,74 @@ function splitServices(str) {
   return result;
 }
 
-function matchesAppointment(svc) {
-  return appointmentServices.has(svc.toLowerCase().trim());
+// ============================================================================
+// DATE / TIME NORMALIZATION + MATCH KEYS
+// ============================================================================
+
+// M/D/YYYY or MM/DD/YYYY -> MM/DD/YYYY. Returns '' if invalid.
+function normalizedDate(dateStr) {
+  const dp = String(dateStr || '').trim().split('/');
+  if (dp.length !== 3) return '';
+  const mo = parseInt(dp[0], 10), da = parseInt(dp[1], 10), yr = parseInt(dp[2], 10);
+  if (isNaN(mo) || isNaN(da) || isNaN(yr)) return '';
+  return `${String(mo).padStart(2, '0')}/${String(da).padStart(2, '0')}/${yr}`;
 }
 
+// "9:05 AM ET", "09:05 AM", "14:05" -> "HH:MM" (24-hour). Returns '' if invalid.
+function normalizedTime(timeStr) {
+  const t = String(timeStr || '').replace(/\s*[A-Z]{2,4}\s*$/i, '').trim(); // strip trailing tz like ET
+  let m = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+  let h, mi;
+  if (m) {
+    h = parseInt(m[1], 10); mi = parseInt(m[2], 10);
+    const ap = m[3].toUpperCase();
+    if (ap === 'PM' && h !== 12) h += 12;
+    else if (ap === 'AM' && h === 12) h = 0;
+  } else {
+    m = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (!m) return '';
+    h = parseInt(m[1], 10); mi = parseInt(m[2], 10);
+  }
+  if (isNaN(h) || isNaN(mi) || h > 23 || mi > 59) return '';
+  return `${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}`;
+}
+
+function dayMatchKey(studentId, dateStr, location) {
+  const d = normalizedDate(dateStr);
+  if (!studentId || !d || !location) return null;
+  return `${String(studentId).trim()}|${d}|${String(location).trim()}`;
+}
+
+function exactMatchKey(studentId, location, service, dateNorm, timeNorm) {
+  const svc = String(service || '').trim().toLowerCase();
+  if (!studentId || !location || !svc || !dateNorm || !timeNorm) return null;
+  return `${String(studentId).trim()}|${String(location).trim()}|${svc}|${dateNorm}|${timeNorm}`;
+}
+
+// ============================================================================
+// SERVICE SELECTION
+// ============================================================================
 function buildServiceSelection() {
   serviceData = {};
   selectedServices = new Set();
   for (const row of checkinData) {
-    let cu = row['Care Unit'] || 'Unknown';
-    let loc = row['Location'] || 'Unknown';
+    const cu = row['Care Unit'] || 'Unknown';
+    const loc = row['Location'] || 'Unknown';
     const svc = row['Student Services'] || '';
-    if (cu === 'Advising' && loc === 'Transfer Support') { cu = 'Transfer'; loc = 'Transfer Engagement Initiative'; }
     if (!svc) continue;
     if (!serviceData[cu]) serviceData[cu] = {};
     if (!serviceData[cu][loc]) serviceData[cu][loc] = {};
-    if (!serviceData[cu][loc][svc]) serviceData[cu][loc][svc] = { count: 0, matchedRecords: 0, matches: matchesAppointment(svc) };
-    serviceData[cu][loc][svc].count++;
-    // Engagement match: does this check-in correspond to an appointment?
-    // Same student + same day + same location (using the remapped location for consistency).
-    const key = engagementKey(row['Student ID'], row['Check In Date'], loc);
-    if (key && appointmentDayKeys.has(key)) serviceData[cu][loc][svc].matchedRecords++;
+    if (!serviceData[cu][loc][svc]) serviceData[cu][loc][svc] = { count: 0, exact: 0, day: 0 };
+    const d = serviceData[cu][loc][svc];
+    d.count++;
+
+    const sid = row['Student ID'];
+    // Same-day match: Student ID + Check In Date + Location vs appointment Reported Start Date
+    const dayKey = dayMatchKey(sid, row['Check In Date'], loc);
+    if (dayKey && apptDayKeys.has(dayKey)) d.day++;
+    // Exact match: Student ID + Location + Service + Check In Date + Check In Time vs appointment check-in timestamp
+    const exKey = exactMatchKey(sid, loc, svc, normalizedDate(row['Check In Date']), normalizedTime(row['Check In Time']));
+    if (exKey && apptExactKeys.has(exKey)) d.exact++;
   }
 
   let html = '';
@@ -701,24 +724,32 @@ function buildServiceSelection() {
       const locTotal = Object.values(svcs).reduce((s, v) => s + v.count, 0);
       const locId = hashId(cu, loc, '_loc_');
       html += `<div class="location-group"><div class="location-head"><span onclick="toggleLoc(this)">📍 ${esc(loc)}</span><div class="location-actions"><button onclick="selLoc('${locId}',true)">All</button><button onclick="selLoc('${locId}',false)">None</button><span class="location-count">${locTotal.toLocaleString()}</span></div></div>`;
-      html += `<div class="service-list" data-loc="${locId}">`;
+      html += `<div class="service-list" data-loc="${locId}"><table class="svc-table"><thead><tr><th></th><th>Service</th><th class="num">Check-in Records</th><th class="num">Exact Matches</th><th class="num">Same-Day Matches</th></tr></thead><tbody>`;
       for (const svc of Object.keys(svcs).sort()) {
         const d = svcs[svc];
         const id = hashId(cu, loc, svc);
         selectedServices.add(id);
-        const icon = d.matches ? '<span class="match-yes">✅</span>' : '<span class="match-no">❌</span>';
-        const pct = d.count > 0 ? Math.round((d.matchedRecords / d.count) * 100) : 0;
-        const pctClass = pct >= 75 ? 'pct-high' : (pct >= 25 ? 'pct-mid' : 'pct-low');
-        const pctLabel = `<span class="svc-pct ${pctClass}" title="${d.matchedRecords.toLocaleString()} of ${d.count.toLocaleString()} check-ins correspond to an appointment (same student, same day, same location) — i.e. already represented in the appointment report">${pct}% in appts</span>`;
-        html += `<div class="service-item"><input type="checkbox" id="${id}" checked onchange="updateSel()" data-cu="${esc(cu)}" data-loc="${esc(loc)}" data-svc="${esc(svc)}" data-cnt="${d.count}" data-matched="${d.matchedRecords}" data-match="${d.matches}">${icon}<label for="${id}">${esc(svc)}</label>${pctLabel}<span class="svc-count">(${d.count.toLocaleString()})</span></div>`;
+        html += `<tr>` +
+          `<td class="chk"><input type="checkbox" id="${id}" checked onchange="updateSel()" data-svc="${esc(svc)}" data-cnt="${d.count}" data-exact="${d.exact}" data-day="${d.day}"></td>` +
+          `<td><label for="${id}">${esc(svc)}</label></td>` +
+          `<td class="num">${d.count.toLocaleString()}</td>` +
+          `<td class="num">${d.exact.toLocaleString()}${pctBadge(d.exact, d.count)}</td>` +
+          `<td class="num">${d.day.toLocaleString()}${pctBadge(d.day, d.count)}</td>` +
+          `</tr>`;
       }
-      html += '</div></div>';
+      html += '</tbody></table></div></div>';
     }
     html += '</div>';
   }
   document.getElementById('serviceContent').innerHTML = html;
   document.getElementById('totalCount').textContent = checkinData.length.toLocaleString();
   updateSummary();
+}
+
+function pctBadge(n, total) {
+  const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+  const cls = pct >= 75 ? 'pct-high' : (pct >= 25 ? 'pct-mid' : 'pct-low');
+  return `<span class="pct ${cls}">${pct}%</span>`;
 }
 
 function hashId(a, b, c) {
@@ -730,7 +761,7 @@ function hashId(a, b, c) {
 
 function esc(t) {
   const d = document.createElement('div');
-  d.textContent = t;
+  d.textContent = t == null ? '' : String(t);
   return d.innerHTML;
 }
 
@@ -765,24 +796,6 @@ function deselectAllServices() {
   updateSummary();
 }
 
-function selectMatchingOnly() {
-  document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => {
-    const m = cb.dataset.match === 'true';
-    cb.checked = m;
-    m ? selectedServices.add(cb.id) : selectedServices.delete(cb.id);
-  });
-  updateSummary();
-}
-
-function selectNonMatchingOnly() {
-  document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => {
-    const m = cb.dataset.match === 'true';
-    cb.checked = !m;
-    !m ? selectedServices.add(cb.id) : selectedServices.delete(cb.id);
-  });
-  updateSummary();
-}
-
 function updateSel() {
   selectedServices = new Set();
   document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => { if (cb.checked) selectedServices.add(cb.id); });
@@ -790,17 +803,20 @@ function updateSel() {
 }
 
 function updateSummary() {
-  let total = 0, matched = 0;
+  let total = 0, exact = 0, day = 0;
   document.querySelectorAll('#serviceContent input[type="checkbox"]').forEach(cb => {
     if (cb.checked) {
       total += parseInt(cb.dataset.cnt, 10) || 0;
-      matched += parseInt(cb.dataset.matched, 10) || 0;
+      exact += parseInt(cb.dataset.exact, 10) || 0;
+      day += parseInt(cb.dataset.day, 10) || 0;
     }
   });
+  const pct = n => total > 0 ? Math.round((n / total) * 100) + '%' : '0%';
   document.getElementById('selectedCount').textContent = total.toLocaleString();
-  const pct = total > 0 ? Math.round((matched / total) * 100) : 0;
-  document.getElementById('overallMatchPct').textContent = pct + '%';
-  document.getElementById('overallMatchCount').textContent = matched.toLocaleString();
+  document.getElementById('exactTotal').textContent = exact.toLocaleString();
+  document.getElementById('exactPct').textContent = pct(exact);
+  document.getElementById('dayTotal').textContent = day.toLocaleString();
+  document.getElementById('dayPct').textContent = pct(day);
 }
 
 function getSelectedSvcNames() {
@@ -809,38 +825,23 @@ function getSelectedSvcNames() {
   return set;
 }
 
+// ============================================================================
+// DUPLICATE DETECTION
+// ============================================================================
+function updateDedupToggle() {
+  const on = document.getElementById('dedupToggle').checked;
+  document.getElementById('thresholdRow').classList.toggle('off', !on);
+  document.getElementById('thresholdInput').disabled = !on;
+  document.getElementById('processBtn').textContent = on ? 'Process & Find Duplicates' : 'Process';
+}
+
 function parseDateTime(dateStr, timeStr) {
-  if (!dateStr || !timeStr) return null;
-  const t = timeStr.replace(/\s*ET\s*$/i, '').trim();
-  const dp = dateStr.split('/');
-  if (dp.length !== 3) return null;
-  const [mo, da, yr] = dp.map(Number);
-  if (isNaN(mo) || isNaN(da) || isNaN(yr)) return null;
-  const tm = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!tm) return null;
-  let h = parseInt(tm[1], 10);
-  const m = parseInt(tm[2], 10);
-  const ap = tm[3].toUpperCase();
-  if (ap === 'PM' && h !== 12) h += 12;
-  else if (ap === 'AM' && h === 12) h = 0;
-  return new Date(yr, mo - 1, da, h, m, 0, 0);
-}
-
-// Normalize a date string (M/D/YYYY or MM/DD/YYYY) to canonical MM/DD/YYYY. Returns '' if invalid.
-function normalizedDate(dateStr) {
-  const dp = String(dateStr || '').trim().split('/');
-  if (dp.length !== 3) return '';
-  const mo = parseInt(dp[0], 10), da = parseInt(dp[1], 10), yr = parseInt(dp[2], 10);
-  if (isNaN(mo) || isNaN(da) || isNaN(yr)) return '';
-  return `${String(mo).padStart(2, '0')}/${String(da).padStart(2, '0')}/${yr}`;
-}
-
-// Engagement key: same student, same day, same location.
-// Check-in side uses Check In Date; appointment side uses Reported Start Date.
-function engagementKey(studentId, dateStr, location) {
   const d = normalizedDate(dateStr);
-  if (!studentId || !d || !location) return null;
-  return `${String(studentId).trim()}|${d}|${String(location).trim()}`;
+  const t = normalizedTime(timeStr);
+  if (!d || !t) return null;
+  const [mo, da, yr] = d.split('/').map(Number);
+  const [h, m] = t.split(':').map(Number);
+  return new Date(yr, mo - 1, da, h, m, 0, 0);
 }
 
 function processData() {
@@ -852,21 +853,19 @@ function processData() {
   if (!filteredData.length) { alert('No records match selected services.'); return; }
 
   // Step 2: parse datetimes
-  filteredData.forEach(r => { r._dt = parseDateTime(r['Check In Date'], r['Check In Time']); });
+  filteredData.forEach(r => { r._dt = parseDateTime(r['Check In Date'], r['Check In Time']); r._flag = ''; });
 
   // Step 3: sort
-  filteredData.sort((a, b) => {
-    let c = (a['Location'] || '').localeCompare(b['Location'] || '');
-    if (c) return c;
-    c = (a['Student ID'] || '').localeCompare(b['Student ID'] || '');
-    if (c) return c;
-    if (!a._dt) return 1;
-    if (!b._dt) return -1;
-    return a._dt - b._dt;
-  });
+  filteredData.sort(sortByLocStudentTime);
 
-  // Step 4: detect duplicates
+  // Step 4: detect duplicates (or skip when the Step 2 toggle is off)
   cleanRecords = []; originalRecords = []; duplicateRecords = []; duplicateClusters = [];
+  dedupEnabled = document.getElementById('dedupToggle').checked;
+  if (!dedupEnabled) {
+    cleanRecords = filteredData.slice();
+    displayResults();
+    return;
+  }
   const groups = {};
   for (const r of filteredData) {
     const k = `${r['Location']}|${r['Student ID']}`;
@@ -890,10 +889,10 @@ function processData() {
       }
       if (cluster.length === 1) { g[cluster[0]]._flag = ''; cleanRecords.push(g[cluster[0]]); }
       else {
-        g[cluster[0]]._flag = 'Original'; g[cluster[0]]._origTime = null; originalRecords.push(g[cluster[0]]);
+        g[cluster[0]]._flag = 'Original'; originalRecords.push(g[cluster[0]]);
         const clusterDups = [];
         for (let x = 1; x < cluster.length; x++) {
-          g[cluster[x]]._flag = 'Duplicate'; g[cluster[x]]._origTime = first._dt; 
+          g[cluster[x]]._flag = 'Duplicate';
           duplicateRecords.push(g[cluster[x]]);
           clusterDups.push(g[cluster[x]]);
         }
@@ -906,19 +905,30 @@ function processData() {
   displayResults();
 }
 
+function sortByLocStudentTime(a, b) {
+  let c = (a['Location'] || '').localeCompare(b['Location'] || '');
+  if (c) return c;
+  c = (a['Student ID'] || '').localeCompare(b['Student ID'] || '');
+  if (c) return c;
+  if (!a._dt) return 1;
+  if (!b._dt) return -1;
+  return a._dt - b._dt;
+}
+
 function displayResults() {
   document.getElementById('statFiltered').textContent = filteredData.length.toLocaleString();
   document.getElementById('statClean').textContent = cleanRecords.length.toLocaleString();
   document.getElementById('statOriginal').textContent = originalRecords.length.toLocaleString();
   document.getElementById('statDuplicate').textContent = duplicateRecords.length.toLocaleString();
   document.getElementById('statFinal').textContent = (cleanRecords.length + originalRecords.length).toLocaleString();
+  document.querySelectorAll('.stat.dedup-only').forEach(el => el.style.display = dedupEnabled ? '' : 'none');
   document.getElementById('resultsSection').style.display = 'block';
 
-  if (duplicateRecords.length) {
+  if (dedupEnabled && duplicateRecords.length) {
     document.getElementById('dupSection').style.display = 'block';
     document.getElementById('dupCount').textContent = duplicateRecords.length.toLocaleString() + ' duplicates in ' + duplicateClusters.length.toLocaleString() + ' clusters';
-    
-    // Build location summary
+
+    // Location summary
     const locSummary = {};
     for (const cluster of duplicateClusters) {
       const loc = cluster.original['Location'] || 'Unknown';
@@ -926,25 +936,20 @@ function displayResults() {
       locSummary[loc].duplicates += cluster.duplicates.length;
       locSummary[loc].clusters += 1;
     }
-    
-    // Render location summary table (sorted by duplicate count descending)
     const sortedLocs = Object.keys(locSummary).sort((a, b) => locSummary[b].duplicates - locSummary[a].duplicates);
     let summaryHtml = '';
     for (const loc of sortedLocs) {
-      summaryHtml += `<tr><td>${esc(loc)}</td><td style="text-align:right">${locSummary[loc].duplicates.toLocaleString()}</td><td style="text-align:right">${locSummary[loc].clusters.toLocaleString()}</td></tr>`;
+      summaryHtml += `<tr><td>${esc(loc)}</td><td class="num">${locSummary[loc].duplicates.toLocaleString()}</td><td class="num">${locSummary[loc].clusters.toLocaleString()}</td></tr>`;
     }
     document.getElementById('dupSummaryBody').innerHTML = summaryHtml;
-    
-    // Build detailed cluster table
+
+    // Cluster detail table
     let html = '';
     for (let c = 0; c < duplicateClusters.length; c++) {
       const cluster = duplicateClusters[c];
-      // Add spacer between clusters (except before first)
       if (c > 0) html += '<tr class="cluster-spacer"><td colspan="7"></td></tr>';
-      // Original row (green)
       const o = cluster.original;
       html += `<tr class="row-original"><td><strong>ORIGINAL</strong></td><td>${esc(o['Student Name'] || '')}</td><td>${esc(o['Student ID'] || '')}</td><td>${esc(o['Location'] || '')}</td><td>${esc(o['Check In Date'] || '')}</td><td>${esc(o['Check In Time'] || '')}</td><td>${esc(o['Student Services'] || '')}</td></tr>`;
-      // Duplicate rows (red)
       for (const d of cluster.duplicates) {
         html += `<tr class="row-duplicate"><td>DUPLICATE</td><td>${esc(d['Student Name'] || '')}</td><td>${esc(d['Student ID'] || '')}</td><td>${esc(d['Location'] || '')}</td><td>${esc(d['Check In Date'] || '')}</td><td>${esc(d['Check In Time'] || '')}</td><td>${esc(d['Student Services'] || '')}</td></tr>`;
       }
@@ -957,17 +962,19 @@ function displayResults() {
   document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
 }
 
+// ============================================================================
+// EXPORT
+// ============================================================================
 function exportDuplicates() {
   if (!duplicateRecords.length) { alert('No duplicates.'); return; }
   const hdrs = ['Type', 'Student Name', 'Student ID', 'Location', 'Check In Date', 'Check In Time', 'Student Services'];
-  let csv = hdrs.map(h => `"${h}"`).join(',') + '\n';
+  const q = v => `"${String(v || '').replace(/"/g, '""')}"`;
+  let csv = hdrs.map(q).join(',') + '\n';
   for (const cluster of duplicateClusters) {
-    // Original row
     const o = cluster.original;
-    csv += ['ORIGINAL', o['Student Name'], o['Student ID'], o['Location'], o['Check In Date'], o['Check In Time'], o['Student Services']].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(',') + '\n';
-    // Duplicate rows
+    csv += ['ORIGINAL', o['Student Name'], o['Student ID'], o['Location'], o['Check In Date'], o['Check In Time'], o['Student Services']].map(q).join(',') + '\n';
     for (const d of cluster.duplicates) {
-      csv += ['DUPLICATE', d['Student Name'], d['Student ID'], d['Location'], d['Check In Date'], d['Check In Time'], d['Student Services']].map(v => `"${(v || '').replace(/"/g, '""')}"`).join(',') + '\n';
+      csv += ['DUPLICATE', d['Student Name'], d['Student ID'], d['Location'], d['Check In Date'], d['Check In Time'], d['Student Services']].map(q).join(',') + '\n';
     }
   }
   download(csv, `duplicates_removed_${new Date().toISOString().slice(0, 10)}.csv`);
@@ -975,20 +982,16 @@ function exportDuplicates() {
 
 function exportCleanedData() {
   const exp = [...cleanRecords, ...originalRecords];
-  exp.sort((a, b) => {
-    let c = (a['Location'] || '').localeCompare(b['Location'] || '');
-    if (c) return c;
-    c = (a['Student ID'] || '').localeCompare(b['Student ID'] || '');
-    if (c) return c;
-    if (!a._dt) return 1;
-    if (!b._dt) return -1;
-    return a._dt - b._dt;
-  });
+  exp.sort(sortByLocStudentTime);
   if (!exp.length) { alert('No records to export.'); return; }
-  let csv = checkinHeaders.map(h => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
-  for (const r of exp) csv += checkinHeaders.map(h => `"${(r[h] || '').replace(/"/g, '""')}"`).join(',') + '\n';
-  download(csv, `checkin_cleaned_${new Date().toISOString().slice(0, 10)}.csv`);
-  document.getElementById('successAlert').innerHTML = `✅ Exported ${exp.length.toLocaleString()} records (${duplicateRecords.length.toLocaleString()} duplicates removed)`;
+  const q = v => `"${String(v || '').replace(/"/g, '""')}"`;
+  let csv = checkinHeaders.map(q).join(',') + '\n';
+  for (const r of exp) csv += checkinHeaders.map(h => q(r[h])).join(',') + '\n';
+  const stamp = new Date().toISOString().slice(0, 10);
+  download(csv, dedupEnabled ? `checkin_cleaned_${stamp}.csv` : `checkin_filtered_${stamp}.csv`);
+  document.getElementById('successAlert').innerHTML = dedupEnabled
+    ? `✅ Exported ${exp.length.toLocaleString()} records (${duplicateRecords.length.toLocaleString()} duplicates removed)`
+    : `✅ Exported ${exp.length.toLocaleString()} records (duplicate detection off)`;
   document.getElementById('successAlert').style.display = 'block';
 }
 
