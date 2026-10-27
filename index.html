@@ -1,12 +1,29 @@
 <!--
 ================================================================================
   App:          Navigate Check-in Cleanup App for CUNY
-  Version:      1.2
-  Released:     October 8, 2026
+  Version:      1.3
+  Released:     October 27, 2026
   Developed by: Josh Goldblatt using Claude
 ================================================================================
   CHANGELOG (most recent first)
 --------------------------------------------------------------------------------
+  v1.3  2026-10-27
+    - Duplicates are now classified by how they relate to the cluster's
+      original check-in:
+        * Exact — identical Check In Date and Check In Time (0-minute gap),
+          typically a double submission at the kiosk.
+        * Within threshold — later than the original but inside the Step 2
+          time window; this is the judgment call the threshold controls.
+      Removal behavior is unchanged: both kinds are removed and Final Count
+      is unaffected.
+    - Where the split appears: a sub-line on the Duplicates stat card
+      ("N exact · M within threshold"); two new columns (Exact, Within
+      Threshold) in the Duplicates by Location summary; the Type column in
+      the Duplicate Details table and the Export Duplicates CSV now reads
+      DUPLICATE (EXACT) or DUPLICATE (THRESHOLD) instead of DUPLICATE.
+    - Short definitions added under the Results stat cards (After Filter,
+      Clean, Original (Keep), Duplicates, Final Count) and a note that the
+      Step 1 Exact / Same-Day match columns do not feed into Step 2.
   v1.2  2026-10-08
     - The app now accepts either Navigate appointment export as the
       "Appointment Report":
@@ -75,7 +92,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Navigate Check-in Cleanup App for CUNY v1.2</title>
+<title>Navigate Check-in Cleanup App for CUNY v1.3</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -167,6 +184,10 @@ header{padding:38px 0 0}
 .stat.ink::before{background:var(--ink)}
 .stat .num{font-family:var(--font-display);font-size:32px;font-weight:700;line-height:1}
 .stat .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin-top:6px;font-weight:600}
+.stat .sub{font-size:12px;color:var(--ink-faint);margin-top:6px;font-variant-numeric:tabular-nums}
+.stat-defs{font-size:13px;color:var(--ink-soft);line-height:1.6;margin:-12px 0 26px;padding:14px 18px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+.stat-defs b{color:var(--ink)}
+.stat-defs .def{margin-bottom:3px}
 
 /* ---------- Table ---------- */
 .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);background:var(--card)}
@@ -312,8 +333,8 @@ header{padding:38px 0 0}
         <p class="subtitle">Filter check-in records by service, compare against appointment data, and remove duplicates for accurate student activity reporting.</p>
       </div>
       <div class="meta-box">
-        <b>Version:</b><span>1.2</span>
-        <b>Released:</b><span>October 8, 2026</span>
+        <b>Version:</b><span>1.3</span>
+        <b>Released:</b><span>October 27, 2026</span>
         <b>Developed by:</b><span>Josh Goldblatt using Claude</span>
       </div>
     </div>
@@ -391,8 +412,16 @@ header{padding:38px 0 0}
       <div class="stat"><div class="num" id="statFiltered">0</div><div class="lbl">After Filter</div></div>
       <div class="stat green dedup-only"><div class="num" id="statClean">0</div><div class="lbl">Clean</div></div>
       <div class="stat gold dedup-only"><div class="num" id="statOriginal">0</div><div class="lbl">Original (Keep)</div></div>
-      <div class="stat dedup-only"><div class="num" id="statDuplicate">0</div><div class="lbl">Duplicates</div></div>
+      <div class="stat dedup-only"><div class="num" id="statDuplicate">0</div><div class="lbl">Duplicates</div><div class="sub" id="statDuplicateSub"></div></div>
       <div class="stat teal"><div class="num" id="statFinal">0</div><div class="lbl">Final Count</div></div>
+    </div>
+    <div class="stat-defs" id="statDefs">
+      <div class="def"><b>After Filter</b> — check-ins whose service you left checked in Step 1. This is the pool Step 2 works on.</div>
+      <div class="def dedup-only"><b>Clean</b> — check-ins with no other check-in for the same Student ID and Location within the time threshold (or with an unreadable date/time). Nothing to decide; kept.</div>
+      <div class="def dedup-only"><b>Original (Keep)</b> — the earliest check-in in each duplicate cluster. Kept.</div>
+      <div class="def dedup-only"><b>Duplicates</b> — later check-ins in a cluster. Removed. <b>Exact</b> = same Check In Date and Time as the original; <b>Within threshold</b> = later than the original but inside the time window.</div>
+      <div class="def"><b>Final Count</b> — Clean + Original (Keep); what the export contains.</div>
+      <div class="def muted" style="margin-top:6px">The Exact / Same-Day match columns in Step 1 compare check-ins against the appointment report and are for choosing services only; they play no part in Step 2.</div>
     </div>
 
     <!-- Duplicates collapsible -->
@@ -413,6 +442,8 @@ header{padding:38px 0 0}
               <tr>
                 <th>Location</th>
                 <th class="num">Duplicates</th>
+                <th class="num">Exact</th>
+                <th class="num">Within Threshold</th>
                 <th class="num">Clusters</th>
               </tr>
             </thead>
@@ -853,7 +884,7 @@ function processData() {
   if (!filteredData.length) { alert('No records match selected services.'); return; }
 
   // Step 2: parse datetimes
-  filteredData.forEach(r => { r._dt = parseDateTime(r['Check In Date'], r['Check In Time']); r._flag = ''; });
+  filteredData.forEach(r => { r._dt = parseDateTime(r['Check In Date'], r['Check In Time']); r._flag = ''; r._dupKind = ''; });
 
   // Step 3: sort
   filteredData.sort(sortByLocStudentTime);
@@ -892,9 +923,12 @@ function processData() {
         g[cluster[0]]._flag = 'Original'; originalRecords.push(g[cluster[0]]);
         const clusterDups = [];
         for (let x = 1; x < cluster.length; x++) {
-          g[cluster[x]]._flag = 'Duplicate';
-          duplicateRecords.push(g[cluster[x]]);
-          clusterDups.push(g[cluster[x]]);
+          const dup = g[cluster[x]];
+          dup._flag = 'Duplicate';
+          // v1.3: Exact = same minute as the original; Threshold = later but inside the window.
+          dup._dupKind = (dup._dt - first._dt) === 0 ? 'Exact' : 'Threshold';
+          duplicateRecords.push(dup);
+          clusterDups.push(dup);
         }
         duplicateClusters.push({ original: g[cluster[0]], duplicates: clusterDups });
       }
@@ -920,8 +954,13 @@ function displayResults() {
   document.getElementById('statClean').textContent = cleanRecords.length.toLocaleString();
   document.getElementById('statOriginal').textContent = originalRecords.length.toLocaleString();
   document.getElementById('statDuplicate').textContent = duplicateRecords.length.toLocaleString();
+  const exactCount = duplicateRecords.filter(r => r._dupKind === 'Exact').length;
+  const threshCount = duplicateRecords.length - exactCount;
+  document.getElementById('statDuplicateSub').textContent = duplicateRecords.length
+    ? `${exactCount.toLocaleString()} exact · ${threshCount.toLocaleString()} within threshold`
+    : '';
   document.getElementById('statFinal').textContent = (cleanRecords.length + originalRecords.length).toLocaleString();
-  document.querySelectorAll('.stat.dedup-only').forEach(el => el.style.display = dedupEnabled ? '' : 'none');
+  document.querySelectorAll('.stat.dedup-only, .stat-defs .dedup-only').forEach(el => el.style.display = dedupEnabled ? '' : 'none');
   document.getElementById('resultsSection').style.display = 'block';
 
   if (dedupEnabled && duplicateRecords.length) {
@@ -932,14 +971,17 @@ function displayResults() {
     const locSummary = {};
     for (const cluster of duplicateClusters) {
       const loc = cluster.original['Location'] || 'Unknown';
-      if (!locSummary[loc]) locSummary[loc] = { duplicates: 0, clusters: 0 };
+      if (!locSummary[loc]) locSummary[loc] = { duplicates: 0, exact: 0, thresh: 0, clusters: 0 };
       locSummary[loc].duplicates += cluster.duplicates.length;
+      locSummary[loc].exact += cluster.duplicates.filter(d => d._dupKind === 'Exact').length;
+      locSummary[loc].thresh += cluster.duplicates.filter(d => d._dupKind !== 'Exact').length;
       locSummary[loc].clusters += 1;
     }
     const sortedLocs = Object.keys(locSummary).sort((a, b) => locSummary[b].duplicates - locSummary[a].duplicates);
     let summaryHtml = '';
     for (const loc of sortedLocs) {
-      summaryHtml += `<tr><td>${esc(loc)}</td><td class="num">${locSummary[loc].duplicates.toLocaleString()}</td><td class="num">${locSummary[loc].clusters.toLocaleString()}</td></tr>`;
+      const s = locSummary[loc];
+      summaryHtml += `<tr><td>${esc(loc)}</td><td class="num">${s.duplicates.toLocaleString()}</td><td class="num">${s.exact.toLocaleString()}</td><td class="num">${s.thresh.toLocaleString()}</td><td class="num">${s.clusters.toLocaleString()}</td></tr>`;
     }
     document.getElementById('dupSummaryBody').innerHTML = summaryHtml;
 
@@ -951,7 +993,7 @@ function displayResults() {
       const o = cluster.original;
       html += `<tr class="row-original"><td><strong>ORIGINAL</strong></td><td>${esc(o['Student Name'] || '')}</td><td>${esc(o['Student ID'] || '')}</td><td>${esc(o['Location'] || '')}</td><td>${esc(o['Check In Date'] || '')}</td><td>${esc(o['Check In Time'] || '')}</td><td>${esc(o['Student Services'] || '')}</td></tr>`;
       for (const d of cluster.duplicates) {
-        html += `<tr class="row-duplicate"><td>DUPLICATE</td><td>${esc(d['Student Name'] || '')}</td><td>${esc(d['Student ID'] || '')}</td><td>${esc(d['Location'] || '')}</td><td>${esc(d['Check In Date'] || '')}</td><td>${esc(d['Check In Time'] || '')}</td><td>${esc(d['Student Services'] || '')}</td></tr>`;
+        html += `<tr class="row-duplicate"><td>${dupTypeLabel(d)}</td><td>${esc(d['Student Name'] || '')}</td><td>${esc(d['Student ID'] || '')}</td><td>${esc(d['Location'] || '')}</td><td>${esc(d['Check In Date'] || '')}</td><td>${esc(d['Check In Time'] || '')}</td><td>${esc(d['Student Services'] || '')}</td></tr>`;
       }
     }
     document.getElementById('dupTableBody').innerHTML = html;
@@ -960,6 +1002,11 @@ function displayResults() {
   }
 
   document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+// v1.3: Type label for a duplicate record (details table and Export Duplicates CSV).
+function dupTypeLabel(d) {
+  return d._dupKind === 'Exact' ? 'DUPLICATE (EXACT)' : 'DUPLICATE (THRESHOLD)';
 }
 
 // ============================================================================
@@ -974,7 +1021,7 @@ function exportDuplicates() {
     const o = cluster.original;
     csv += ['ORIGINAL', o['Student Name'], o['Student ID'], o['Location'], o['Check In Date'], o['Check In Time'], o['Student Services']].map(q).join(',') + '\n';
     for (const d of cluster.duplicates) {
-      csv += ['DUPLICATE', d['Student Name'], d['Student ID'], d['Location'], d['Check In Date'], d['Check In Time'], d['Student Services']].map(q).join(',') + '\n';
+      csv += [dupTypeLabel(d), d['Student Name'], d['Student ID'], d['Location'], d['Check In Date'], d['Check In Time'], d['Student Services']].map(q).join(',') + '\n';
     }
   }
   download(csv, `duplicates_removed_${new Date().toISOString().slice(0, 10)}.csv`);
